@@ -205,3 +205,38 @@ Coherence (1BR ≥ 90% of studio, rejected 224 tracts) + relative MOE ≤ 0.30
   and produces a blank map — that is a harness artifact, not a page bug.
 - Still open: walk/cycle modes (Valhalla tiles building), bus network, income
   half of DEV-316, NTA-level map layer.
+
+## DEV-322 — bike + walk modes shipped (Valhalla)
+
+Valhalla 3.5.1 runs in Docker over the Geofabrik `new-york-latest` +
+`new-jersey-latest` extracts, tiles built locally, `scripts/build_modes.py`
+routes every tract centroid to the anchor under `pedestrian` and `bicycle` and
+writes `data/commute_modes.csv`; `join_all.py` left-merges it and `build_html.py`
+adds a **Travel mode** selector so the choropleth, the ranked list and the popup
+all switch between transit, bike and walk.
+
+Three defects were in the first cut of this stage, all found by checking the
+output against the router by hand rather than trusting the run's exit code:
+
+1. **Matrix response read wrong.** Valhalla's `sources_to_targets` returns
+   `matrix[source][target]`; the code took `[0]`, i.e. the first source's row,
+   and silently kept **one tract per batch** — 18 walked and 11 cycled out of
+   7,570, each with a time 60× too large.
+2. **Seconds read as minutes.** `time` is always seconds in Valhalla; `units`
+   only affects distance. Everything was stored 60× high.
+3. **One unroutable source killed a whole batch.** Pedal costings cap path
+   distance at 200 km; a single upstate tract in a 100-source matrix makes the
+   request return HTTP 400 and lose all 100 rows. Fixed twice over: a
+   `--radius-km` scope filter (default 30 km) and a per-source retry
+   (`route_each`) so a bad source costs only itself.
+
+Result: 3,274 tracts inside 30 km, 3,270 walk / 3,272 cycle resolved, walk
+median 161 min, cycle median 76 min against the 60-minute screen. Under the
+default $2,000–3,000 budget the shortlist is 400 transit / 298 cycle / 82 walk.
+
+Render verified with `scripts/check_render.py` (Playwright + SwiftShader, system
+Chrome — the bundled Playwright build drifts from the installed package):
+zero page errors, all three modes shade correctly. A plain headless browser has
+no WebGL, so `new maplibregl.Map()` throws there and the whole script never
+reaches `draw()` — harness artifact, not a page bug, and the reason the render
+check must pass `--enable-unsafe-swiftshader`.

@@ -1,0 +1,21 @@
+{
+  "router": "valhalla",
+  "version": "3.5.1",
+  "costings": [
+    "pedestrian",
+    "bicycle"
+  ],
+  "destination": {
+    "name": "1 Penn Plaza",
+    "lat": 40.75056,
+    "lon": -73.99386
+  },
+  "extracts": [
+    "new-jersey-latest.osm.pbf",
+    "new-york-latest.osm.pbf"
+  ],
+  "tracts_routed": 3274,
+  "radius_km": 30.0,
+  "tracts_outside_radius": 4296,
+  "generated_by": "scripts/build_modes.py"
+}

@@ -28,6 +28,7 @@ import urllib.request
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -93,6 +94,39 @@ def tract_centroids():
     return cents[["GEOID", "lat", "lon"]].rename(columns={"GEOID": "geoid"})
 
 
+def haversine_km(lat, lon, lat0, lon0):
+    """Great-circle distance in km; a cheap proxy for route distance."""
+    r = 6371.0088
+    p1, p2 = np.radians(lat), np.radians(lat0)
+    dp = p2 - p1
+    dl = np.radians(lon - lon0)
+    a = np.sin(dp / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dl / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))
+
+
+def route_each(chunk, costing, dest):
+    """Per-source fallback for a batch Valhalla rejected wholesale.
+
+    A matrix call returns HTTP 400 if *any* source is unroutable (most often a
+    pair past the costing's max-distance limit), which would silently blank the
+    other 99 tracts. Ask for each source alone so only the bad one is lost.
+    """
+    rows = []
+    for r in chunk.itertuples():
+        payload = {
+            "sources": [{"lat": float(r.lat), "lon": float(r.lon)}],
+            "targets": [{"lat": dest[0], "lon": dest[1]}],
+            "costing": costing,
+            "units": "minutes",
+        }
+        try:
+            got = valhalla("/sources_to_targets", payload).get("sources_to_targets") or []
+        except (RuntimeError, KeyError, IndexError):
+            got = []
+        rows.append(got[0][0] if got and got[0] else {})
+    return rows
+
+
 def route_batch(frame, costing, dest, batch_size):
     """One sources_to_targets call per batch; returns minutes parallel to frame."""
     out = []
@@ -103,21 +137,25 @@ def route_batch(frame, costing, dest, batch_size):
             "sources": [{"lat": float(r.lat), "lon": float(r.lon)} for r in chunk.itertuples()],
             "targets": [{"lat": dest[0], "lon": dest[1]}],
             "costing": costing,
-            "units": "minutes",
+            "units": "kilometers",
         }
         try:
             resp = valhalla("/sources_to_targets", payload)
-            rows = resp.get("sources_to_targets", [[]])[0]
+            # Valhalla returns matrix[source][target]; each of our requests has a
+            # single target, so the per-source row is matrix[i][0].
+            matrix = resp.get("sources_to_targets") or []
+            rows = [matrix[i][0] if i < len(matrix) and matrix[i] else {} for i in range(len(chunk))]
         except RuntimeError as exc:
-            print(f"  ! batch {start}-{start + len(chunk)} failed: {exc}")
-            rows = []
+            print(f"  ! batch {start}-{start + len(chunk)} failed ({exc}); retrying one by one")
+            rows = route_each(chunk, costing, dest)
         for i in range(len(chunk)):
             t = None
             if i < len(rows) and isinstance(rows[i], dict):
                 # unreachable pairs return a null time; keep it null rather than
                 # implying a fast trip
                 t = rows[i].get("time")
-            out.append(None if t is None else round(float(t), 1))
+            # Valhalla reports time in seconds; the column is minutes
+            out.append(None if t is None else round(float(t) / 60.0, 1))
         done = min(start + batch_size, total)
         print(f"  {costing}: {done:,}/{total:,}", end="\r", flush=True)
     print()
@@ -130,6 +168,10 @@ def main():
                     help="comma-separated Valhalla costings (pedestrian,bicycle)")
     ap.add_argument("--batch", type=int, default=100, help="sources per matrix call")
     ap.add_argument("--limit", type=int, default=None, help="route only the first N tracts")
+    ap.add_argument("--radius-km", type=float, default=30.0,
+                    help="route only tracts within this straight-line distance of the "
+                         "destination; pedal costings reject pairs past their max-distance "
+                         "limit, and a rejected pair aborts the whole matrix batch")
     args = ap.parse_args()
 
     costings = [c.strip() for c in args.costings.split(",") if c.strip()]
@@ -144,6 +186,11 @@ def main():
     cents = tract_centroids()
     if args.limit:
         cents = cents.head(args.limit)
+
+    dist = haversine_km(cents.lat, cents.lon, C.PENN1[0], C.PENN1[1])
+    dropped = int((dist > args.radius_km).sum())
+    cents = cents[dist <= args.radius_km].reset_index(drop=True)
+    print(f"  radius {args.radius_km:g} km: {len(cents):,} tracts kept, {dropped:,} dropped")
     print(f"  routing {len(cents):,} tracts to PENN1 {C.PENN1}")
 
     result = cents.copy()
@@ -166,6 +213,8 @@ def main():
         "destination": {"name": "1 Penn Plaza", "lat": C.PENN1[0], "lon": C.PENN1[1]},
         "extracts": sorted(p.name for p in C.OSM_DIR.glob("*.pbf")),
         "tracts_routed": int(len(result)),
+        "radius_km": args.radius_km,
+        "tracts_outside_radius": dropped,
         "generated_by": "scripts/build_modes.py",
     }
     C.OUT_COMMUTE_META.write_text(json.dumps(meta, indent=2) + "\n")

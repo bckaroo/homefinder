@@ -15,8 +15,11 @@ single accessibility number.
 1. **Reachability, per mode.** Peak-hour multimodal GTFS graph (MTA subway,
    Metro-North, LIRR, PATH) with walk transfers at hub stations and Dijkstra
    from an employment anchor. Cycling and walking are *separate modes* over the
-   street network, not a speed reduction on the transit result. **Built: transit
-   only.** Cycling/walking are DEV-322.
+   street network, not a speed reduction on the transit result: Valhalla routes
+   every tract centroid to the anchor under `pedestrian` and `bicycle` costings
+   (`scripts/build_modes.py`). **Built: all three modes**, with bike/walk
+   computed for the tracts inside a 30 km radius of the anchor — outside that,
+   the tract is left unshaded rather than given a fabricated time.
 2. **Destination.** The anchor is an input, not a constant — the tool answers
    for *your* workplace. Currently hardcoded to 1 Penn Plaza (DEV-323).
 3. **Affordability** — ACS 5-year housing cost by census tract (B25031, B25064),
@@ -34,6 +37,8 @@ No bus network — outer Queens/Brooklyn tracts inherit their nearest rail
 station's time and read as better commutes than they are. Tracts beyond the
 22-minute walk gate are omitted rather than shown as long commutes. Rents are
 ACS medians with a `>= $3,501` topcode censoring 19.7% of Manhattan tracts.
+Bike/walk times are free-flow street-network estimates with no weather, traffic
+or e-bike assumptions, and only exist inside the 30 km routing radius.
 
 ## Layout
 

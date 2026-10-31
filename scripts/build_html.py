@@ -52,7 +52,9 @@ def main():
     geo = gpd.GeoDataFrame(geo, geometry="geometry", crs=4326)
     geo["GEOID"] = geo.GEOID.astype(str)
 
-    keep = df[df.commute_min.notna()].copy()
+    # Keep every tract with at least one way of reaching Penn 1; walk/cycle
+    # alone is a valid answer for tracts the transit graph cannot serve.
+    keep = df[df[["commute_min", "walk_mode_min", "cycle_mode_min"]].notna().any(axis=1)].copy()
     m = geo.merge(keep, left_on="GEOID", right_on="geoid", how="inner")
     print(f"  map features: {len(m)}")
 
@@ -66,6 +68,10 @@ def main():
             "station": r.station,
             "net": r.station_net,
             "commute": None if pd.isna(r.commute_min) else round(float(r.commute_min), 1),
+            # door-to-door times from the Valhalla street router; null when the
+            # tract is outside the routed radius or unreachable on foot/bike
+            "walk": None if pd.isna(r.walk_mode_min) else round(float(r.walk_mode_min), 1),
+            "cycle": None if pd.isna(r.cycle_mode_min) else round(float(r.cycle_mode_min), 1),
             "ride": None if pd.isna(r.ride_min) else round(float(r.ride_min), 1),
             "walkm": None if pd.isna(r.station_walk_min) else round(float(r.station_walk_min), 1),
             "stu": None if pd.isna(r.rent_studio) else int(r.rent_studio),
@@ -202,8 +208,15 @@ TEMPLATE = r"""<!DOCTYPE html>
       <h1>PENN 1 → apartment explorer</h1>
       <div class="sub">Census tracts · commute ≤ <b id="cmaxlbl">60</b> min · rent $<span id="rminlbl">2000</span>–$<span id="rmaxlbl">3000</span></div>
       <div class="sub" style="margin-top:5px;color:#c98a3a">Rents are ACS 5-yr <b>paid</b> medians, not asking rents. Asking runs 1.4× (Queens) to 2.2× (Manhattan) higher — measured against Zillow ZORI. A tract showing $2,400 here is asking ~$3,400–5,300.</div>
+      <div class="sub" style="margin-top:5px;color:#8b98a8">Bike and walk times come from the OpenStreetMap street network (Valhalla), computed for the <b>3,274 tracts within 30 km</b> of Penn 1. Farther tracts stay unshaded under those modes — no estimate is inferred.</div>
     </div>
     <div id="controls">
+      <div class="row"><label for="mode">Travel mode</label>
+        <select id="mode">
+          <option value="transit" selected>Transit (rail + walk)</option>
+          <option value="cycle">Bike — door to door</option>
+          <option value="walk">Walk — door to door</option>
+        </select></div>
       <div class="row"><label for="cmax">Max commute</label>
         <input id="cmax" type="range" min="10" max="60" step="5" value="60"><b id="cmaxv">60m</b></div>
       <div class="row"><label for="rmin">Rent floor</label>
@@ -264,8 +277,17 @@ let ready=false;
 function money(v){return v==null?'—':'$'+v.toLocaleString()}
 function capTxt(v,c){return c?'<span style="color:#fbbf24">≥$3,501</span>':money(v)}
 
+// Effective door-to-door minutes under the selected mode. Bike and walk come
+// from the street router; a tract with no routed time stays unshaded rather
+// than falling back to a transit figure.
+function modeMin(p){
+  const m=document.getElementById('mode').value;
+  return m==='cycle'?p.cycle:(m==='walk'?p.walk:p.commute);
+}
+
 function color(p,cmax,rmin,rmax){
-  if(p.commute==null||p.commute>cmax) return null;
+  const t=modeMin(p);
+  if(t==null||t>cmax) return null;
   const vals=[];
   if(p.stu!=null&&!p.stu_cap) vals.push({v:p.stu,rel:p.stu_rel});
   if(p.one!=null&&!p.one_cap) vals.push({v:p.one,rel:p.one_rel});
@@ -297,9 +319,11 @@ function tractFC(){
 }
 
 function popupHTML(p){
+  const t=modeMin(p);
   return `<b>${p.station||'—'}</b> <span style="color:#888">(${p.net||''})</span><br>
-    commute <b>${p.commute==null?'—':p.commute+' min'}</b>
-    <span style="color:#888">(ride ${p.ride}m + walk ${p.walkm}m)</span><br>
+    ${document.getElementById('mode').value} <b>${t==null?'—':t+' min'}</b><br>
+    <span style="color:#888">transit ${p.commute==null?'—':p.commute+'m'} (ride ${p.ride==null?'—':p.ride}m + walk ${p.walkm==null?'—':p.walkm}m)
+    · bike ${p.cycle==null?'—':p.cycle+'m'} · walk ${p.walk==null?'—':p.walk+'m'}</span><br>
     studio ${capTxt(p.stu,p.stu_cap)}<br>
     1BR ${capTxt(p.one,p.one_cap)}<br>
     all units ${capTxt(p.allr,p.allr_cap)}<br>
@@ -308,8 +332,10 @@ function popupHTML(p){
 
 function detailHTML(p){
   return `<div class="t">${p.station||'—'} <span style="color:#888;font-weight:400">${p.net||''}</span></div>
-    <div class="kv"><span>Commute</span><b>${p.commute==null?'—':p.commute+' min'}</b></div>
+    <div class="kv"><span>Transit</span><b>${p.commute==null?'—':p.commute+' min'}</b></div>
     <div class="kv"><span>Ride / walk</span><span>${p.ride==null?'—':p.ride}m + ${p.walkm==null?'—':p.walkm}m</span></div>
+    <div class="kv"><span>Bike door-to-door</span><span>${p.cycle==null?'—':p.cycle+' min'}</span></div>
+    <div class="kv"><span>Walk door-to-door</span><span>${p.walk==null?'—':p.walk+' min'}</span></div>
     <div class="kv"><span>Studio median</span><span>${capTxt(p.stu,p.stu_cap)}</span></div>
     <div class="kv"><span>1BR median</span><span>${capTxt(p.one,p.one_cap)}</span></div>
     <div class="kv"><span>All-units median</span><span>${capTxt(p.allr,p.allr_cap)}</span></div>
@@ -368,7 +394,7 @@ function draw(){
   if(ready) map.getSource('tracts').setData(tractFC());
 
   const rows=D.tracts.features.map(f=>f.properties)
-    .filter(p=>p.commute!=null&&p.commute<=cmax)
+    .filter(p=>{const t=modeMin(p); return t!=null&&t<=cmax;})
     .filter(p=>{
       if(!onlyB) return true;
       const vals=[];
@@ -376,13 +402,13 @@ function draw(){
       if(p.one!=null&&!p.one_cap) vals.push({v:p.one,rel:p.one_rel});
       return vals.some(x=>x.v>=rmin&&x.v<=rmax&&x.rel!=null&&x.rel<=meta.max_rel_moe);
     })
-    .sort((a,b)=>a.commute-b.commute);
+    .sort((a,b)=>modeMin(a)-modeMin(b));
   const tb=document.getElementById('tb');
   tb.innerHTML=rows.slice(0,400).map(p=>{
     const st=p.stu_cap?'<span class="p-cap">≥3.5k</span>':money(p.stu);
     const on=p.one_cap?'<span class="p-cap">≥3.5k</span>':money(p.one);
     return `<tr data-g="${p.geoid}"><td>${p.station||'—'}</td>
-      <td>${p.commute}m</td><td>${st}</td><td>${on}</td></tr>`;
+      <td>${modeMin(p)}m</td><td>${st}</td><td>${on}</td></tr>`;
   }).join('');
   [...tb.querySelectorAll('tr')].forEach(tr=>{
     tr.onclick=()=>{
@@ -402,6 +428,7 @@ function draw(){
 }
 
 ['cmax','rmin','rmax'].forEach(id=>document.getElementById(id).oninput=draw);
+document.getElementById('mode').onchange=draw;
 document.getElementById('onlyBudget').onchange=draw;
 document.getElementById('showLines').onchange=e=>{
   if(ready) map.setLayoutProperty('lines','visibility',e.target.checked?'visible':'none');
