@@ -63,6 +63,42 @@ Tracts (NY + NJ) → nearest reachable station by **representative point** →
 minutes' walk away is not a station serving that tract, and claiming otherwise
 manufactures short commutes for rural tracts.
 
+## Stage 3b — asking rents (`scripts/build_asking.py`)
+
+Zillow ZORI, latest month, published per ZIP code. It is a *market* index — the
+typical advertised rent for a constant-quality unit — so it answers a different
+question from ACS B25064, which is what sitting tenants pay. Their ratio is the
+uplift a mover faces on arrival.
+
+There is no free tract-level asking series, so the index is allocated areally:
+
+1. ZIP Code Tabulation Areas for the study envelope are pulled from TIGERweb
+   (`PUMA_TAD_TAZ_UGA_ZCTA/MapServer/11`, ~765 polygons, 16 MB) and cached at
+   `data/raw/geo/zcta520_metro.geojson`. The national shapefile is 529 MB.
+2. Tracts and ZCTAs are projected to UTM 18N (EPSG:32618) and intersected.
+   Areas in a geographic CRS would weight latitude, not ground.
+3. Each tract takes the area-weighted mean ZORI of the ZCTAs it overlaps,
+   ignoring slivers under 100 m². `ask_share` records how much of the tract the
+   matched ZCTAs cover; `ask_nzips` records how many contributed, so a blended
+   tract is visible rather than hidden.
+4. `premium = zori / ACS all-unit rent`, computed only where the ACS value is
+   above $500 (below that the median is group quarters or a handful of
+   subsidised units, and the ratio explodes) and below the $3,501 topcode.
+   `prem_relmoe` carries the ACS relative margin of error; above 0.30 the ratio
+   is drawn faded in the map and flagged in the detail card.
+
+Coverage: 3,130 of 3,457 mapped tracts (90%) fall in a ZCTA that carries an
+index. The remainder are left unpainted — not extrapolated from a neighbour,
+which would invent a rent for exactly the tracts where the data is thinnest.
+
+Measured result: across mapped tracts the market asks a median **1.56×** the
+paid median (p10 1.30×, p90 2.06×). The gap widens with turnover and is widest
+where rent stabilisation holds the sitting stock down, which is the expected
+direction, and is why the map ships both views rather than one "rent" number.
+
+Caveat to keep in view: ZORI excludes utilities while ACS gross rent includes
+them, so a few percent of the premium is definitional, not market.
+
 ## Stage 4 — map (`scripts/build_html.py`)
 
 Static MapLibre GL JS 6.16.0 app. The engine is an ES module, so the page is
@@ -77,6 +113,13 @@ Colour logic, evaluated per tract:
 | red | cheapest reliable value above the rent ceiling |
 | grey | cheapest reliable value below the rent floor |
 | absent | commute exceeds the slider, or no station |
+
+Two further colour modes reuse the same shell (`Colour by` in the Explore pane):
+
+| Mode | Encoding |
+|---|---|
+| Asking | continuous teal, $1,800 → $4,800+ ZORI |
+| Premium | warm ramp, 1.0× → 2.0×+ asking over paid; low-confidence ratios washed toward paper |
 
 Capped values render as `≥$3,501`, never as a number.
 
@@ -94,6 +137,7 @@ curl -O https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-bas
 
 python3 scripts/build_graph.py   # -> data/station_times.csv
 python3 scripts/build_rent.py    # -> data/tract_rent.csv
+python3 scripts/build_asking.py  # -> data/tract_asking.csv (+ ZCTA cache)
 python3 scripts/join_all.py      # -> data/tract_joined.csv, data/shortlist.csv
 python3 scripts/build_html.py    # -> web/index.html
 ```

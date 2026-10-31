@@ -57,6 +57,14 @@ OUT_MAP_HTML = WEB / "index.html"
 OUT_COMMUTE_MODES = DATA / "commute_modes.csv"
 OUT_COMMUTE_META = DATA / "commute_modes.meta.json"
 
+# --- asking rents: ZORI allocated from ZIP codes to tracts ---
+ZCTA_METRO = RAW / "geo" / "zcta520_metro.geojson"   # TIGERweb pull, cached
+ZCTA_BBOX = "-74.60,40.30,-73.30,41.40"              # W,S,E,N around study area
+OUT_TRACT_ASKING = DATA / "tract_asking.csv"
+MIN_RENT_FOR_PREMIUM = 500.0      # below this the ACS median is not a market rent
+PREM_MOE_LIMIT = 0.30             # relative MOE above this: ratio shown as low-confidence
+PREM_CAP = 3.0                   # display buckets top out here ("3x or more")
+
 # --- street-network router (optional stage: walking and cycling modes) ---
 # Port 3204 is registered in ~/.openclaw/config/ports.json as the `valhalla`
 # service entry. The core pipeline must still reproduce without a running

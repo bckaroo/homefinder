@@ -144,6 +144,24 @@ def main():
 
     df["verdict"] = df.apply(verdict, axis=1)
 
+    # Asking rents arrive from a separate stage (ZIP -> tract allocation), and
+    # the pipeline must still run without them: the columns are optional and
+    # every consumer treats them as nullable.
+    if C.OUT_TRACT_ASKING.exists():
+        ask = pd.read_csv(C.OUT_TRACT_ASKING, dtype={"geoid": str,
+                                                     "zori_month": str})
+        ask["geoid"] = ask.geoid.str.zfill(11)
+        df["geoid"] = df.geoid.str.zfill(11)
+        df = df.merge(
+            ask.rename(columns={"zori": "ask", "ask_nzips": "ask_nzips",
+                                "premium": "prem", "prem_relmoe": "prem_relmoe"}),
+            on="geoid", how="left")
+        print(f"asking rents merged: {df.ask.notna().sum():,} tracts")
+    else:
+        for c in ("ask", "zori_month", "ask_nzips", "ask_share", "prem", "prem_relmoe"):
+            df[c] = np.nan
+        print("asking rents: not built (run scripts/build_asking.py)")
+
     df.to_csv(C.OUT_TRACT_JOINED, index=False)
     print(f"\nwrote {C.OUT_TRACT_JOINED}  ({len(df):,} rows)")
 

@@ -351,3 +351,29 @@ Traps hit on the way:
    a pale tint rather than a mid grey.
 4. `check_render.py` drove the old `<select>`; it now clicks the segmented
    control, and waits on `#rows .trow`.
+
+## Asking rents on a branch (`feat/asking-rents`)
+
+The map only ever showed ACS paid rent, which understates what a mover pays.
+Added Zillow ZORI as a second, explicitly market-flavoured layer.
+
+- `scripts/build_asking.py` — TIGERweb ZCTA pull (metro envelope, not the 529 MB
+  national file), areal allocation to tracts in UTM 18N, premium vs ACS
+- new CSV `data/tract_asking.csv`; `join_all.py` left-merges it and tolerates
+  its absence so the pipeline still runs without the stage
+- Explore pane gains `Colour by`: Budget fit / Asking / Premium, with its own
+  legend per mode; detail card gains asking and multiple rows
+- Sources pane text is now generated from the run's own statistics (month,
+  coverage, median premium) instead of hard-coded numbers
+
+Traps hit:
+
+1. `[hidden]` does nothing on an element carrying `display:grid` — the legend
+   never switched until `.keys[hidden]{display:none}` was added.
+2. `keep` in `build_html.main()` is reassigned while building station symbols,
+   so the meta block reading `keep.zori_month` crashed. Snapshot `geo_rows`.
+3. `_props` reported coverage over all 5,524 tract rows while the map only
+   holds 3,457 — "41% coverage" was really 90%. Compute meta stats on the
+   mapped frame.
+4. Dividing by ACS medians under $500 produced 20× outliers (group quarters,
+   token renter counts). Floor the divisor and flag high relative MOE.

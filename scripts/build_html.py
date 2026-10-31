@@ -49,6 +49,7 @@ def main():
     print("loading geometry...")
     keep = df[df[["commute_min", "walk_mode_min", "cycle_mode_min"]].notna().any(axis=1)].copy()
     m, n_water = geo_prep.build(keep, log=print)
+    geo_rows = keep.copy()   # `keep` is reused for station bookkeeping further down
 
     def _props(r):
         return {
@@ -72,6 +73,12 @@ def main():
             "ok": bool(r.trustworthy and r.in_budget and r.commutable),
             "trust": bool(r.trustworthy),
             "budget": bool(r.in_budget),
+            # asking rents: ZORI allocated down from ZIP codes. prem is null
+            # where the ACS paid rent is too small or too noisy to divide by.
+            "ask": None if pd.isna(r.get("ask")) else int(r.ask),
+            "askz": None if pd.isna(r.get("ask_nzips")) else int(r.ask_nzips),
+            "prem": None if pd.isna(r.get("prem")) else round(float(r.prem), 2),
+            "premlo": bool(pd.notna(r.get("prem_relmoe")) and r.prem_relmoe > C.PREM_MOE_LIMIT),
         }
 
     gj = geo_prep.feature_collection(m, _props)
@@ -270,9 +277,22 @@ def main():
     print(f"  {len(stations)} station symbols "
           f"({sum(1 for s in stations if s['xfer'])} interchanges)")
 
-    meta = {"zori_month": "2026-09-30", "acs_vintage": "2017-2021..2020-2024 (5yr 2024)",
+    # Asking-rent context travels in meta so the Sources pane states measured
+    # facts (month, coverage, median premium) instead of hard-coded folklore.
+    zm = geo_rows.zori_month.dropna().astype(str)
+    ask_ctx = {
+        "month": zm.iloc[0][:7] if len(zm) else None,
+        "pct": round(100 * geo_rows.ask.notna().mean(), 0) if "ask" in geo_rows else None,
+        "prem_med": round(float(geo_rows.prem.median()), 2) if geo_rows.prem.notna().any() else None,
+        "prem_moe_limit": C.PREM_MOE_LIMIT,
+        "n_lowconf": int(geo_rows.prem_relmoe.gt(C.PREM_MOE_LIMIT).sum()) if geo_rows.prem.notna().any() else 0,
+    }
+
+    meta = {"zori_month": (zm.iloc[0][:10] if len(zm) else "2026-09-30"),
+            "acs_vintage": "2017-2021..2020-2024 (5yr 2024)",
             "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE,
-            "water_share_max": C.WATER_SHARE_MAX, "water_tracts_removed": n_water}
+            "water_share_max": C.WATER_SHARE_MAX, "water_tracts_removed": n_water,
+            "ask": ask_ctx}
 
     html = render(gj, lines, stations, meta)
     C.ensure_dirs()
@@ -291,7 +311,29 @@ def main():
 def render(gj, lines, stations, meta):
     data = json.dumps({"tracts": gj, "lines": lines, "stations": stations, "meta": meta},
                       separators=(",", ":"))
-    return TEMPLATE.replace("__DATA__", data)
+    a = meta.get("ask") or {}
+    if a.get("prem_med"):
+        pm = a["prem_med"]
+        warn = (f"Across the mapped tracts the market asks <b>{pm:.2f}×</b> the paid "
+                f"median (Zillow ZORI, {a.get('month') or meta['zori_month']}), so a tract "
+                f"showing $2,400 here is asking about ${2400*pm:,.0f}. The gap is widest "
+                f"where turnover is high and rent control holds the sitting stock down.")
+        method = (f"Zillow Observed Rent Index, {a.get('month') or meta['zori_month']}, published "
+                  f"per ZIP code and allocated to tracts by area-weighting the ZIP Code "
+                  f"Tabulation Area overlaps (TIGERweb 2024 boundaries, areas measured in "
+                  f"UTM 18N). {a.get('pct') or 0:.0f}% of mapped tracts fall in a ZCTA that "
+                  f"carries an index; the rest are left unpainted rather than extrapolated. "
+                  f"ZORI is a constant-quality index of what is advertised, not a survey of "
+                  f"what this tract actually pays, and a tract straddling several ZIPs is a "
+                  f"blend (the detail card names how many). Ratios built on an ACS margin of "
+                  f"error above {100*(a.get('prem_moe_limit') or 0):.0f}% are drawn faded "
+                  f"({a.get('n_lowconf') or 0} tracts).")
+    else:
+        warn = "An asking-rent comparison was not built for this run."
+        method = "Run <code>scripts/build_asking.py</code> to add Zillow ZORI."
+    return (TEMPLATE.replace("__DATA__", data)
+                    .replace("__ASKWARN__", warn)
+                    .replace("__ASKMETHOD__", method))
 
 
 TEMPLATE = r"""<!DOCTYPE html>
@@ -386,9 +428,15 @@ TEMPLATE = r"""<!DOCTYPE html>
  .switch input:checked ~ .track{background:var(--accent)}
  .switch input:checked ~ .knob{left:19px}
  .keys{display:grid;gap:7px;padding-top:4px;border-top:1px solid var(--line)}
+ /* `[hidden]` loses to `display:grid`, so the mode switch needs this to hide a legend. */
+ .keys[hidden]{display:none}
+ .kv b.dim{color:var(--muted);font-weight:500;font-size:12px;letter-spacing:.02em}
  .krow{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-soft)}
  .sw{width:13px;height:13px;border-radius:4px;flex:none}
  .sw.dot{border-radius:50%}
+.ramp{height:9px;border-radius:5px;margin:0 0 4px}
+.rampend{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;margin-bottom:6px}
  .hint{font-size:11.5px;color:var(--muted);line-height:1.45}
 
  /* shortlist */
@@ -508,6 +556,13 @@ TEMPLATE = r"""<!DOCTYPE html>
         <button data-v="walk">Walk</button>
       </div>
 
+      <div class="lbl">Colour by</div>
+      <div class="seg" id="cmode">
+        <button data-v="fit" class="on">Budget fit</button>
+        <button data-v="ask">Asking</button>
+        <button data-v="prem">Premium</button>
+      </div>
+
       <div class="slider">
         <div class="top"><span class="lbl">Max commute</span><span class="val"><b id="cmaxlbl">60</b> min</span></div>
         <input id="cmax" type="range" min="10" max="60" step="5" value="60">
@@ -531,12 +586,26 @@ TEMPLATE = r"""<!DOCTYPE html>
       <div class="swrow"><span>Stations</span>
         <label class="switch"><input type="checkbox" id="showStations" checked><span class="track"></span><span class="knob"></span></label></div>
 
-      <div class="keys">
+      <div class="keys" id="keysFit">
         <div class="krow"><span class="sw" style="background:var(--ok)"></span>Median rent in your band (reliable)</div>
         <div class="krow"><span class="sw" style="background:var(--warn)"></span>Above ceiling, or estimate too noisy</div>
         <div class="krow"><span class="sw" style="background:var(--bad)"></span>Over budget</div>
         <div class="krow"><span class="sw" style="background:var(--flat)"></span>Cheaper than your floor</div>
         <div class="krow"><span class="sw dot" style="background:#fff;border:1.5px solid #254c47"></span>Subway interchange</div>
+      </div>
+
+      <div class="keys" id="keysAsk" hidden>
+        <div class="lbl" style="margin-bottom:8px">Asking rent, all units</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#e8eeea,#93bcb3,#33786c,#1d5750)"></div>
+        <div class="rampend"><span>$1,800</span><span>$4,800+</span></div>
+        <div class="krow"><span class="sw" style="background:var(--flat)"></span>No ZIP matched this tract</div>
+      </div>
+
+      <div class="keys" id="keysPrem" hidden>
+        <div class="lbl" style="margin-bottom:8px">Asking ÷ paid rent</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#eae3d2,#d6ab72,#c2824d,#a2532f)"></div>
+        <div class="rampend"><span>1.0×</span><span>2.0×+</span></div>
+        <div class="krow"><span class="sw" style="background:#cfc9b6"></span>Paid rent too noisy to divide by (faded)</div>
       </div>
     </div>
 
@@ -552,9 +621,11 @@ TEMPLATE = r"""<!DOCTYPE html>
         <p>ACS 5-year 2020–2024, table B25031: median gross rent by unit size, per
            census tract. Topcoded at $3,501.</p>
       </div>
-      <div class="warn"><b>These are paid rents, not asking rents.</b> Asking runs about
-        1.4× higher in Queens and 2.2× in Manhattan, measured against Zillow ZORI.
-        A tract showing $2,400 here is asking roughly $3,400–5,300.</div>
+      <div class="warn"><b>These are paid rents, not asking rents.</b> __ASKWARN__</div>
+      <div>
+        <h4>Asking rents</h4>
+        <p>__ASKMETHOD__</p>
+      </div>
       <div>
         <h4>Commute</h4>
         <p>Transit times are a GTFS graph built from MTA, LIRR, Metro-North and PATH
@@ -691,11 +762,67 @@ function ctl(){return{
   rmax:+document.getElementById('rmax').value
 };}
 
+/* ---------- asking rents ---------- */
+// ZORI is a market index, not a survey of this tract: it arrives allocated from
+// ZIP codes, so a tract split between ZCTAs gets a blend (p.askz > 1 tells you
+// so in the detail card). Two extra colour modes keep the same shell: a
+// continuous teal ramp for the asking level, a warm ramp for the multiple over
+// ACS paid rent. Anything the ACS cannot support stays unpainted rather than
+// being invented.
+const ASK_STOPS=[[1800,'#e8eeea'],[2400,'#c3d8d2'],[3000,'#93bcb3'],
+                 [3600,'#5d9a8f'],[4200,'#33786c'],[4800,'#1d5750']];
+const PREM_STOPS=[[1.0,'#eae3d2'],[1.3,'#dcc39b'],[1.5,'#d6ab72'],
+                  [1.7,'#c2824d'],[2.0,'#a2532f']];
+const PAPER='#f6f5ea';
+
+function hex2rgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
+function rgb2hex(r){return '#'+r.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}
+function mix(a,b,t){const x=hex2rgb(a),y=hex2rgb(b);
+  return rgb2hex([0,1,2].map(i=>x[i]+(y[i]-x[i])*t))}
+function ramp(stops,v){
+  if(v<=stops[0][0]) return stops[0][1];
+  for(let i=1;i<stops.length;i++){
+    if(v<=stops[i][0]){
+      const [v0,c0]=stops[i-1],[v1,c1]=stops[i];
+      return mix(c0,c1,(v-v0)/(v1-v0));
+    }
+  }
+  return stops[stops.length-1][1];
+}
+
+function colorMode(){
+  const b=document.querySelector('#cmode button.on');
+  return b?b.dataset.v:'fit';
+}
+
+function askColor(p){
+  if(p.ask==null) return null;
+  return ramp(ASK_STOPS,p.ask);
+}
+
+function premColor(p){
+  if(p.prem==null) return null;
+  const c=ramp(PREM_STOPS,Math.min(p.prem,2.0));
+  // A ratio computed off a high-MOE paid rent is still shown — it is the only
+  // read on that tract — but washed toward paper so it never competes with a
+  // number the survey actually supports.
+  return p.premlo? mix(c,PAPER,0.55) : c;
+}
+
+function fillFor(p,cmax,rmin,rmax){
+  const t=modeMin(p);
+  if(t==null||t>cmax) return null;
+  const m=colorMode();
+  if(m==='ask') return askColor(p);
+  if(m==='prem') return premColor(p);
+  return color(p,cmax,rmin,rmax);
+}
+
 function tractFC(){
   const {cmax,rmin,rmax}=ctl();
   return {type:'FeatureCollection',features:D.tracts.features.map(f=>({
     type:'Feature',
-    properties:Object.assign({},f.properties,{fill:color(f.properties,cmax,rmin,rmax)||NONE}),
+    properties:Object.assign({},f.properties,{fill:fillFor(f.properties,cmax,rmin,rmax)||NONE}),
     geometry:f.geometry
   }))};
 }
@@ -723,8 +850,17 @@ function detailHTML(p){
     <div class="kv"><span>Studio</span><b>${capTxt(p.stu,p.stu_cap)}</b></div>
     <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
     <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
-    <div class="note">ACS 2020–2024 gross rent, median by unit size. Paid, not asking.
-      ${p.trust?'':'⚠ Too few sample units to trust this estimate.'}</div>`;
+    ${p.ask==null?
+      `<div class="kv"><span>Asking, all units</span><b class="dim">no ZIP index</b></div>`:
+      `<div class="kv"><span>Asking, all units</span><b>$${p.ask.toLocaleString()}</b></div>
+       <div class="kv"><span>Asking ÷ paid</span><b>${p.prem==null
+         ?(p.allr_cap?'— topcoded':'— too noisy'):p.prem.toFixed(2)+'×'}</b></div>`}
+    <div class="note">ACS 2020–2024 gross rent, median by unit size. Paid, not asking.${
+      p.ask==null?`<br>This tract sits in a ZCTA that carries no ZORI index, so no
+      asking figure is estimated rather than borrowed from a neighbour.`:
+      `<br>Zillow ZORI ${meta.ask&&meta.ask.month?meta.ask.month:meta.zori_month}, allocated from
+      ${p.askz} ZIP${p.askz===1?'':'s'}${p.premlo?' · ratio low-confidence (wide ACS margin)':''}.`}
+      ${p.trust?'':' ⚠ Too few sample units to trust this estimate.'}</div>`;
 }
 
 map.on('load',()=>{
@@ -936,6 +1072,15 @@ document.getElementById('toSources').onclick=e=>{
 document.getElementById('mode').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#mode button').forEach(x=>x.classList.toggle('on',x===b));
+  draw();
+};
+document.getElementById('cmode').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#cmode button').forEach(x=>x.classList.toggle('on',x===b));
+  const m=colorMode();
+  document.getElementById('keysFit').hidden=(m!=='fit');
+  document.getElementById('keysAsk').hidden=(m!=='ask');
+  document.getElementById('keysPrem').hidden=(m!=='prem');
   draw();
 };
 let is3d=false, auto3d=false, treesLoaded=false;
