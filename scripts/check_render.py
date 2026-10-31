@@ -38,12 +38,12 @@ def main() -> int:
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(PAGE.as_uri())
         page.wait_for_function(
-            "() => { try { return document.querySelectorAll('#tb tr').length > 0 } "
+            "() => { try { return document.querySelectorAll('#rows .trow').length > 0 } "
             "catch(e) { return false } }", timeout=60_000)
         for mode in ("transit", "cycle", "walk"):
-            page.select_option("#mode", mode)
+            page.click(f'#mode button[data-v="{mode}"]')
             page.wait_for_timeout(1200)
-            rows = page.eval_on_selector_all("#tb tr", "els => els.length")
+            rows = page.eval_on_selector_all("#rows .trow", "els => els.length")
             shot = out / f"{mode}.png"
             page.screenshot(path=str(shot))
             print(f"{mode:8} rows={rows:<4} {shot}")

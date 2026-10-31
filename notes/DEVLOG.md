@@ -322,3 +322,32 @@ Two data traps worth remembering:
    a matching/extending station name.
 
 441 symbols, 135 interchanges, at 60 min from Penn.
+
+## Editorial shell + 3D city (Montréal case study)
+
+Rebuilt the whole UI on the Allemannsdata pattern and put a 3D city under it.
+
+- chrome: paper `#edf0e5`, teal `#247d70`, serif display over Public Sans,
+  one soft shadow, tabs (Explore / Shortlist / Sources), bottom-right detail
+  card instead of map popups, circular right rail
+- basemap switched from `dark` to `positron`, re-tinted to the paper colour:
+  residential wash off, woods warmed, street/POI labels dropped
+- line and station sizes now react to zoom; station dots only from z11
+- buildings extruded from OpenFreeMap's own `building` layer
+  (`render_height` / `render_min_height`), 58% opaque so the choropleth reads
+  through them; streets re-drawn over the mass at 40%
+- street trees from the 2015 NYC census, 1-in-4, 170,947 points, lazy-loaded
+
+Traps hit on the way:
+
+1. `layers.sky` does not exist in MapLibre 4.7 — `addLayer` throws
+   `missing required property "source"` and the whole load block after it
+   silently dies. Removed.
+2. A `fill-extrusion` writes depth, and later 3D layers are depth-tested
+   against it. Trees added before the buildings were invisible, not faint.
+3. The first cut painted every tract with no studio/1BR median as "below your
+   floor" — 462 of 3,457 — which turned half the city a uniform grey that read
+   as missing data. Falls back to the all-units median now, and the category is
+   a pale tint rather than a mid grey.
+4. `check_render.py` drove the old `<select>`; it now clicks the segmented
+   control, and waits on `#rows .trow`.

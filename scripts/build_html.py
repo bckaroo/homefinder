@@ -297,111 +297,342 @@ def render(gj, lines, stations, meta):
 TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Penn 1 Apartment Explorer — 60 min</title>
+<title>Housing Explorer — an open data rent map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
- :root{--bg:#0f1115;--panel:#171a21;--ink:#e8eaed;--dim:#9aa4b2;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+ :root{
+   --paper:#edf0e5; --card:#fdfcf6; --card-2:#f6f7ef; --line:#dfe3d6;
+   --ink:#254c47; --ink-soft:#3d5f58; --muted:#6b857c; --muted-2:#8d9c93;
+   --accent:#247d70; --accent-soft:#e3eddd;
+   --ok:#2f8f6f; --warn:#d29a3a; --bad:#c25b52; --flat:#c9d2c3;
+   --r:16px; --r-lg:22px;
+   --shadow:0 1px 2px rgba(30,50,45,.06),0 12px 32px -12px rgba(30,50,45,.22);
+   --font:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+   --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+ }
  *{box-sizing:border-box}
- body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
- #wrap{display:flex;height:100vh}
- #map{flex:1;min-width:0}
- #side{width:390px;background:var(--panel);border-left:1px solid #262b36;display:flex;flex-direction:column}
- #head{padding:14px 16px 10px;border-bottom:1px solid #262b36}
- h1{font-size:15px;margin:0 0 2px;letter-spacing:.2px}
- .sub{color:var(--dim);font-size:11.5px}
- #controls{padding:10px 16px;border-bottom:1px solid #262b36;display:grid;gap:8px}
- .row{display:flex;align-items:center;gap:8px;font-size:12.5px}
- .row label{flex:1;color:var(--dim)}
- input[type=range]{width:118px}
- #list{flex:1;overflow:auto}
- table{width:100%;border-collapse:collapse;font-size:12.5px}
- th{position:sticky;top:0;background:#1d222b;text-align:left;padding:7px 10px;font-weight:600;
-    color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.4px;z-index:2}
- td{padding:7px 10px;border-bottom:1px solid #1f2530}
- tr:hover{background:#1d222b;cursor:pointer}
- .pill{display:inline-block;padding:1px 6px;border-radius:9px;font-size:10.5px;font-weight:600}
- .p-stu{background:#1e3a5f;color:#8ab4f8}
- .p-one{background:#14532d;color:#86efac}
- .p-cap{background:#4a2c00;color:#fbbf24}
- #legend{padding:10px 16px;border-top:1px solid #262b36;font-size:11.5px;color:var(--dim)}
- .lg{display:flex;align-items:center;gap:7px;margin:3px 0}
- .sw{width:13px;height:13px;border-radius:3px;flex:none}
- #detail{padding:12px 16px;border-top:1px solid #262b36;font-size:12.5px;display:none}
- #detail .t{font-weight:600;margin-bottom:6px}
- .kv{display:flex;justify-content:space-between;padding:2px 0}
- .kv span:first-child{color:var(--dim)}
- .note{color:var(--dim);font-size:11px;margin-top:8px;line-height:1.4}
- .maplibregl-popup-content{background:#171a21;color:#e8eaed;font-size:12.5px;
-   padding:9px 12px;border-radius:6px;border:1px solid #262b36;font-family:inherit}
+ html,body{height:100%}
+ body{margin:0;font-family:var(--font);font-size:14px;line-height:1.45;color:var(--ink);background:var(--paper)}
+ button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer}
+ a{color:var(--accent)}
+
+ /* ---------- top bar ---------- */
+ #top{position:fixed;inset:0 0 auto 0;height:56px;display:flex;align-items:center;
+      justify-content:space-between;padding:0 22px;background:var(--card);
+      border-bottom:1px solid var(--line);z-index:30}
+ #brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.1px}
+ #mark{width:22px;height:22px;flex:none}
+ #top .right{display:flex;align-items:center;gap:18px}
+ #top .right a{font-size:13px;color:var(--ink-soft);text-decoration:none}
+ #top .ghost{border:1px solid #b9c4b6;background:transparent;border-radius:8px;
+      padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink-soft)}
+ #top .ghost:hover{background:var(--accent-soft);border-color:var(--accent)}
+
+ /* ---------- map ---------- */
+ #map{position:fixed;inset:56px 0 0 0}
+
+ /* ---------- left column ---------- */
+ #left{position:fixed;top:76px;left:22px;width:352px;max-height:calc(100vh - 156px);
+       display:flex;flex-direction:column;gap:12px;z-index:20}
+ .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
+
+ #title{padding:20px 22px 18px}
+ .eyebrow{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+          font-weight:600}
+ #title h1{margin:6px 0 0;font-family:var(--serif);font-weight:400;font-size:46px;
+            letter-spacing:-.02em;line-height:1;color:var(--ink)}
+ #title h1 .of{font-family:var(--font);font-size:15px;font-weight:500;letter-spacing:0;
+            color:var(--muted);vertical-align:super;margin-left:2px}
+ #title p{margin:10px 0 0;color:var(--muted);font-size:13.5px;line-height:1.5}
+
+ /* tabs */
+ #tabs{display:flex;gap:4px;padding:5px;background:var(--card);border-radius:var(--r)}
+ #tabs button{flex:1;border:0;background:transparent;border-radius:11px;padding:8px 6px;
+              font-size:13px;font-weight:600;color:var(--muted)}
+ #tabs button.on{background:var(--accent);color:#fff}
+
+ /* panes */
+ #panes{flex:1;min-height:0;overflow:hidden;display:flex}
+ .pane{display:none;flex-direction:column;min-height:0;width:100%}
+ .pane.on{display:flex}
+
+ /* explore */
+ #pane-explore{padding:16px 18px 18px;gap:14px;overflow:auto}
+ .lbl{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600}
+ .seg{display:flex;background:var(--card-2);border-radius:11px;padding:3px;gap:3px}
+ .seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:7px 4px;
+             font-size:12.5px;font-weight:600;color:var(--muted)}
+ .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(30,50,45,.12)}
+ .slider{display:grid;gap:6px}
+ .slider .top{display:flex;justify-content:space-between;align-items:baseline}
+ .slider .val{font-weight:600;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+ input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;
+   background:#dde3d6;outline:none}
+ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;
+   border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);
+   border:2px solid #fff}
+ .swrow{display:flex;align-items:center;justify-content:space-between;padding:2px 0;font-size:13px}
+ .swrow span{color:var(--ink-soft)}
+ .switch{position:relative;width:38px;height:21px;flex:none}
+ .switch input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer;position:relative;z-index:2}
+ .switch .track{position:absolute;inset:0;border-radius:11px;background:#d5ddd1;transition:.15s}
+ .switch .knob{position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;
+   background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:.15s;pointer-events:none}
+ .switch input:checked ~ .track{background:var(--accent)}
+ .switch input:checked ~ .knob{left:19px}
+ .keys{display:grid;gap:7px;padding-top:4px;border-top:1px solid var(--line)}
+ .krow{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-soft)}
+ .sw{width:13px;height:13px;border-radius:4px;flex:none}
+ .sw.dot{border-radius:50%}
+ .hint{font-size:11.5px;color:var(--muted);line-height:1.45}
+
+ /* shortlist */
+ #pane-list{min-height:0}
+ .thead{display:grid;grid-template-columns:1fr 58px 62px 62px;gap:4px;padding:12px 16px 8px;
+        font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+        font-weight:600;border-bottom:1px solid var(--line)}
+ .thead span:nth-child(n+2),.trow span:nth-child(n+2){text-align:right}
+ #list{overflow:auto;flex:1;padding:2px 0 6px}
+ .trow{display:grid;grid-template-columns:1fr 58px 62px 62px;gap:4px;padding:8px 16px;
+       font-size:12.5px;border-bottom:1px solid #eef1e7;cursor:pointer;
+       font-variant-numeric:tabular-nums}
+ .trow:hover{background:var(--accent-soft)}
+ .trow b{font-weight:600;color:var(--ink)}
+ .trow .m{color:var(--muted)}
+ #count{padding:9px 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+
+ /* sources */
+ #pane-src{padding:16px 18px;gap:14px;overflow:auto}
+ #pane-src h4{margin:0 0 4px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+ #pane-src p{margin:0;font-size:12.5px;line-height:1.55;color:var(--ink-soft)}
+ #pane-src .warn{background:#fbf3e2;border:1px solid #eddcbb;border-radius:12px;padding:11px 13px;
+   font-size:12.5px;line-height:1.5;color:#7a5a1f}
+
+ /* ---------- right rail ---------- */
+ /* The rail anchors bottom-right and the detail card sits to its left, so the
+   two never collide however tall the card grows or short the window is. */
+#rail{position:fixed;right:22px;bottom:22px;display:grid;gap:8px;z-index:22}
+ #rail button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);
+   background:var(--card);box-shadow:var(--shadow);display:grid;place-items:center;
+   font-size:17px;color:var(--ink-soft);line-height:1}
+ #rail button:hover{background:var(--accent-soft);color:var(--accent);border-color:#c9d7c3}
+ #rail button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+ #rail svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;
+   stroke-linecap:round;stroke-linejoin:round}
+
+ /* ---------- detail card (bottom right) ---------- */
+ #detail{position:fixed;right:80px;bottom:22px;width:322px;padding:18px 20px 20px;z-index:21;
+   display:none}
+ #detail.on{display:block}
+ #detail .x{position:absolute;top:12px;right:12px;border:0;background:transparent;font-size:18px;
+   color:var(--muted);line-height:1;padding:2px 4px}
+ #detail h3{margin:6px 0 2px;font-family:var(--serif);font-weight:400;font-size:26px;
+   letter-spacing:-.01em;color:var(--ink);line-height:1.15}
+ #detail .net{font-size:12px;color:var(--muted);margin-bottom:12px}
+ #detail .big{display:flex;align-items:baseline;gap:8px;margin:10px 0 12px}
+ #detail .big b{font-size:27px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+ #detail .big span{font-size:12px;color:var(--muted)}
+ #detail .kv{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;
+   border-top:1px solid #eef1e7}
+ #detail .kv span:first-child{color:var(--muted)}
+ #detail .kv b{font-weight:600;font-variant-numeric:tabular-nums}
+ #detail .note{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.45}
+
+ /* ---------- attribution ---------- */
+ #attr{position:fixed;left:22px;bottom:22px;z-index:20;background:rgba(253,252,246,.92);
+   border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:11px;
+   color:var(--muted);backdrop-filter:blur(4px)}
+ #attr a{color:var(--muted);text-decoration:none;border-bottom:1px solid #cfd8c9}
+
+ /* maplibre overrides */
+ .maplibregl-ctrl-attrib{display:none!important}
+ .maplibregl-popup-content{background:var(--card);color:var(--ink);font-family:var(--font);
+   font-size:12.5px;padding:11px 13px;border-radius:12px;border:1px solid var(--line);
+   box-shadow:var(--shadow)}
  .maplibregl-popup-content b{font-size:13px}
- .maplibregl-popup-tip{border-top-color:#171a21!important;border-bottom-color:#171a21!important}
- .maplibregl-ctrl-attrib{background:rgba(15,17,21,.82)!important}
- .maplibregl-ctrl-attrib a{color:#9aa4b2}
- .maplibregl-ctrl-group{background:#171a21!important;border:1px solid #262b36!important}
- .maplibregl-ctrl-group button+button{border-top:1px solid #262b36!important}
- .maplibregl-ctrl-icon{filter:invert(1) brightness(1.6)}
+ .maplibregl-popup-tip{border-top-color:var(--card)!important;border-bottom-color:var(--card)!important}
+ #pin{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2.5px solid #fff;
+   box-shadow:0 0 0 4px rgba(36,125,112,.22)}
+
+ @media (max-width:900px){
+   #left{left:10px;right:10px;width:auto;top:66px;max-height:52vh}
+   #title h1{font-size:34px}
+   #rail{right:10px;bottom:10px}
+   #detail{left:10px;right:70px;width:auto;bottom:10px}
+   #attr{display:none}
+ }
 </style></head><body>
-<div id="wrap">
-  <div id="map"></div>
-  <div id="side">
-    <div id="head">
-      <h1>PENN 1 → apartment explorer</h1>
-      <div class="sub">Census tracts · commute ≤ <b id="cmaxlbl">60</b> min · rent $<span id="rminlbl">2000</span>–$<span id="rmaxlbl">3000</span></div>
-      <div class="sub" style="margin-top:5px;color:#c98a3a">Rents are ACS 5-yr <b>paid</b> medians, not asking rents. Asking runs 1.4× (Queens) to 2.2× (Manhattan) higher — measured against Zillow ZORI. A tract showing $2,400 here is asking ~$3,400–5,300.</div>
-      <div class="sub" style="margin-top:5px;color:#8b98a8">Bike and walk times come from the OpenStreetMap street network (Valhalla), computed for the <b>3,274 tracts within 30 km</b> of Penn 1. Farther tracts stay unshaded under those modes — no estimate is inferred.</div>
+
+<div id="top">
+  <div id="brand">
+    <svg id="mark" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="4" width="20" height="16" rx="3" fill="#247d70"/>
+      <path d="M6 9h6M6 13h9M6 17h5" stroke="#fdfcf6" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="17.5" cy="8.5" r="2.4" fill="#fdfcf6"/>
+    </svg>
+    Housing Explorer
+  </div>
+  <div class="right">
+    <a href="#" id="toSources">Method &amp; sources</a>
+    <button class="ghost" id="resetTop">Reset view</button>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="left">
+  <div class="card" id="title">
+    <div class="eyebrow">An open data housing map</div>
+    <h1>New York<span class="of">/ 60 min</span></h1>
+    <p>Census tracts within an hour of Penn Station, coloured by what they
+       actually cost. Choose a mode, set a rent band, read the map.</p>
+  </div>
+
+  <div id="tabs">
+    <button data-pane="explore" class="on">Explore</button>
+    <button data-pane="list">Shortlist</button>
+    <button data-pane="src">Sources</button>
+  </div>
+
+  <div class="card" id="panes">
+    <div class="pane on" id="pane-explore">
+      <div class="lbl">Travel mode</div>
+      <div class="seg" id="mode">
+        <button data-v="transit" class="on">Transit</button>
+        <button data-v="cycle">Bike</button>
+        <button data-v="walk">Walk</button>
+      </div>
+
+      <div class="slider">
+        <div class="top"><span class="lbl">Max commute</span><span class="val"><b id="cmaxlbl">60</b> min</span></div>
+        <input id="cmax" type="range" min="10" max="60" step="5" value="60">
+        <div class="hint" id="hintC">Door to door, including the walk at both ends.</div>
+      </div>
+
+      <div class="slider">
+        <div class="top"><span class="lbl">Rent floor</span><span class="val" id="rminv">$2,000</span></div>
+        <input id="rmin" type="range" min="1000" max="4500" step="100" value="2000">
+      </div>
+
+      <div class="slider">
+        <div class="top"><span class="lbl">Rent ceiling</span><span class="val" id="rmaxv">$3,000</span></div>
+        <input id="rmax" type="range" min="1200" max="6000" step="100" value="3000">
+      </div>
+
+      <div class="swrow"><span>In-budget tracts only</span>
+        <label class="switch"><input type="checkbox" id="onlyBudget" checked><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span>Transit lines</span>
+        <label class="switch"><input type="checkbox" id="showLines" checked><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span>Stations</span>
+        <label class="switch"><input type="checkbox" id="showStations" checked><span class="track"></span><span class="knob"></span></label></div>
+
+      <div class="keys">
+        <div class="krow"><span class="sw" style="background:var(--ok)"></span>Median rent in your band (reliable)</div>
+        <div class="krow"><span class="sw" style="background:var(--warn)"></span>Above ceiling, or estimate too noisy</div>
+        <div class="krow"><span class="sw" style="background:var(--bad)"></span>Over budget</div>
+        <div class="krow"><span class="sw" style="background:var(--flat)"></span>Cheaper than your floor</div>
+        <div class="krow"><span class="sw dot" style="background:#fff;border:1.5px solid #254c47"></span>Subway interchange</div>
+      </div>
     </div>
-    <div id="controls">
-      <div class="row"><label for="mode">Travel mode</label>
-        <select id="mode">
-          <option value="transit" selected>Transit (rail + walk)</option>
-          <option value="cycle">Bike — door to door</option>
-          <option value="walk">Walk — door to door</option>
-        </select></div>
-      <div class="row"><label for="cmax">Max commute</label>
-        <input id="cmax" type="range" min="10" max="60" step="5" value="60"><b id="cmaxv">60m</b></div>
-      <div class="row"><label for="rmin">Rent floor</label>
-        <input id="rmin" type="range" min="1000" max="4500" step="100" value="2000"><b id="rminv">$2k</b></div>
-      <div class="row"><label for="rmax">Rent ceiling</label>
-        <input id="rmax" type="range" min="1200" max="6000" step="100" value="3000"><b id="rmaxv">$3k</b></div>
-      <div class="row"><label><input type="checkbox" id="onlyBudget" checked> In-budget only</label></div>
-      <div class="row"><label><input type="checkbox" id="showLines" checked> Transit lines</label>
-        <label><input type="checkbox" id="showStations" checked> Stations</label></div>
+
+    <div class="pane" id="pane-list">
+      <div class="thead"><span>Tract / station</span><span>Min</span><span>Studio</span><span>1BR</span></div>
+      <div id="list"><div id="rows"></div></div>
+      <div id="count"></div>
     </div>
-    <div id="list">
-      <table><thead><tr><th>Tract</th><th>Commute</th><th>Studio</th><th>1BR</th></tr></thead>
-      <tbody id="tb"></tbody></table>
-    </div>
-    <div id="detail"></div>
-    <div id="legend">
-      <div class="lg"><span class="sw" style="background:#22c55e"></span>Tract median in budget (reliable)</div>
-      <div class="lg"><span class="sw" style="background:#f59e0b"></span>Above ceiling / unreliable estimate</div>
-      <div class="lg"><span class="sw" style="background:#ef4444"></span>Over budget</div>
-      <div class="lg" style="margin-top:6px">— <span style="color:#eee">Subway</span> in MTA line colours · <span style="color:#c1121f">Metro-North</span> · <span style="color:#b5179e">LIRR</span> · <span style="color:#0f766e">PATH</span></div>
-      <div class="lg">Stops: line-coloured dot · <span class="sw" style="background:#fff;border:1.5px solid #111318"></span> interchange</div>
+
+    <div class="pane" id="pane-src">
+      <div>
+        <h4>Rents</h4>
+        <p>ACS 5-year 2020–2024, table B25031: median gross rent by unit size, per
+           census tract. Topcoded at $3,501.</p>
+      </div>
+      <div class="warn"><b>These are paid rents, not asking rents.</b> Asking runs about
+        1.4× higher in Queens and 2.2× in Manhattan, measured against Zillow ZORI.
+        A tract showing $2,400 here is asking roughly $3,400–5,300.</div>
+      <div>
+        <h4>Commute</h4>
+        <p>Transit times are a GTFS graph built from MTA, LIRR, Metro-North and PATH
+          timetables. Bike and walk times come from the OpenStreetMap street network
+          (Valhalla), computed for the 3,274 tracts within 30 km of Penn 1. A tract with
+          no routed time stays unshaded under those modes — nothing is inferred.</p>
+      </div>
+      <div>
+        <h4>Buildings, trees, streets</h4>
+        <p>Buildings are extruded live from OpenFreeMap's OpenMapTiles vector tiles,
+          which carry modelled heights; nothing is downloaded per building. Street
+          trees are the 2015 NYC Street Tree Census (every 4th of 683,788, for
+          payload size). Streets are re-drawn over the 3D mass so the grid stays
+          legible. Buildings are deliberately 42% opaque — solid enough to read as a
+          city, translucent enough to keep the tract colour underneath.</p>
+      </div>
+      <div>
+        <h4>Geometry</h4>
+        <p>Census tracts from TIGER/Line 2024, coast-clipped against TIGER water
+          polygons and simplified as a coverage at 15 m, so neighbouring tracts keep
+          identical edges. Tracts that are ≥ 90% water are dropped.</p>
+      </div>
+      <div>
+        <h4>Data</h4>
+        <p>U.S. Census Bureau ACS · TIGER/Line · NYC Open Data ZORI · MTA, LIRR,
+          Metro-North, PATH GTFS · OpenStreetMap contributors · OpenFreeMap tiles.</p>
+      </div>
     </div>
   </div>
 </div>
+
+<div id="rail">
+  <button id="btnHome" title="Centre on Penn 1" aria-label="Centre on Penn 1">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="btn3d" title="Toggle 3D buildings" aria-label="Toggle 3D buildings">
+    <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+  </button>
+  <button id="btnIn" title="Zoom in" aria-label="Zoom in">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button id="btnOut" title="Zoom out" aria-label="Zoom out">
+    <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+  </button>
+  <button id="btnReset" title="Reset" aria-label="Reset view">
+    <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+  </button>
+</div>
+
+<div class="card" id="detail"></div>
+
+<div id="attr">
+  © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ·
+  <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ·
+  Census ACS 2020–2024 · ZORI
+</div>
+
 <script>
 const D = __DATA__;
 const meta = D.meta;
 const NETC={subway:'#1f6feb',mnr:'#c1121f',lirr:'#b5179e',path:'#0f766e'};
 
-// Basemap: OpenFreeMap vector tiles ("dark" style) rendered by MapLibre GL.
-// Attribution (OpenFreeMap / © OpenMapTiles / © OpenStreetMap) is supplied by
-// the style itself, so it stays correct without hand-maintained credits.
+// Basemap: OpenFreeMap "positron" — a pale, low-label style, so the choropleth
+// and the MTA line colours carry the colour and the streets stay legible.
 const map = new maplibregl.Map({
   container:'map',
-  style:'https://tiles.openfreemap.org/styles/dark',
+  style:'https://tiles.openfreemap.org/styles/positron',
   center:[-73.95,40.78],
   zoom:10,
-  attributionControl:{compact:true}
+  pitch:0,
+  bearing:0,
+  attributionControl:false
 });
-map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-left');
 
-new maplibregl.Marker({color:'#38bdf8'}).setLngLat([-73.99386,40.75056])
-  .setPopup(new maplibregl.Popup({offset:26}).setHTML('<b>PENN 1</b><br>1 Penn Plaza, 34th St'))
-  .addTo(map);
+const HOME={center:[-73.99386,40.75056],zoom:12.4};
+
+new maplibregl.Marker({element:(()=>{const d=document.createElement('div');d.id='pin';return d;})()})
+  .setLngLat([-73.99386,40.75056]).addTo(map);
 
 // D.lines coords are [lat,lon] (Leaflet order); GeoJSON wants [lon,lat].
 const lineFC={type:'FeatureCollection',features:D.lines
@@ -419,30 +650,37 @@ const NONE='#000000';
 let ready=false;
 
 function money(v){return v==null?'—':'$'+v.toLocaleString()}
-function capTxt(v,c){return c?'<span style="color:#fbbf24">≥$3,501</span>':money(v)}
+function capTxt(v,c){return c?'≥$3,501':money(v)}
 
-// Effective door-to-door minutes under the selected mode. Bike and walk come
-// from the street router; a tract with no routed time stays unshaded rather
-// than falling back to a transit figure.
 function modeMin(p){
-  const m=document.getElementById('mode').value;
+  const m=document.querySelector('#mode button.on').dataset.v;
   return m==='cycle'?p.cycle:(m==='walk'?p.walk:p.commute);
+}
+
+// Band test, studio and 1BR first. Most tracts report no studio or 1BR median —
+// 462 of 3,457 have neither — so fall back to the all-units median before
+// giving up, otherwise half the city paints as an undifferentiated grey.
+function rentVals(p){
+  const v=[];
+  if(p.stu!=null&&!p.stu_cap) v.push({v:p.stu,rel:p.stu_rel});
+  if(p.one!=null&&!p.one_cap) v.push({v:p.one,rel:p.one_rel});
+  if(!v.length&&p.allr!=null&&!p.allr_cap) v.push({v:p.allr,rel:null,alt:true});
+  return v;
 }
 
 function color(p,cmax,rmin,rmax){
   const t=modeMin(p);
   if(t==null||t>cmax) return null;
-  const vals=[];
-  if(p.stu!=null&&!p.stu_cap) vals.push({v:p.stu,rel:p.stu_rel});
-  if(p.one!=null&&!p.one_cap) vals.push({v:p.one,rel:p.one_rel});
-  const inb=vals.filter(x=>x.v>=rmin&&x.v<=rmax&&x.rel!=null&&x.rel<=meta.max_rel_moe);
-  if(inb.length) return '#22c55e';
-  if((p.stu_cap||p.one_cap)&&vals.length===0) return '#f59e0b';
-  const any=vals.length?Math.min(...vals.map(x=>x.v)):null;
-  if(any!=null&&any>rmax) return '#ef4444';
-  if(any!=null&&any<rmin) return '#3b4351';
-  if(vals.some(x=>x.rel==null||x.rel>meta.max_rel_moe)) return '#f59e0b';
-  return '#3b4351';
+  const vals=rentVals(p);
+  if(!vals.length) return (p.stu_cap||p.one_cap)?'#d29a3a':null;
+  const inb=vals.filter(x=>x.v>=rmin&&x.v<=rmax&&
+      (x.alt||(x.rel!=null&&x.rel<=meta.max_rel_moe)));
+  if(inb.length) return '#2f8f6f';
+  const any=Math.min(...vals.map(x=>x.v));
+  if(any>rmax) return '#c25b52';
+  if(any<rmin) return '#c9d2c3';
+  if(vals.some(x=>!x.alt&&(x.rel==null||x.rel>meta.max_rel_moe))) return '#d29a3a';
+  return '#c9d2c3';
 }
 
 function ctl(){return{
@@ -451,8 +689,6 @@ function ctl(){return{
   rmax:+document.getElementById('rmax').value
 };}
 
-// The fill colour is precomputed per feature and read by the layer expression,
-// which keeps one data-driven fill layer instead of re-adding layers per move.
 function tractFC(){
   const {cmax,rmin,rmax}=ctl();
   return {type:'FeatureCollection',features:D.tracts.features.map(f=>({
@@ -464,69 +700,151 @@ function tractFC(){
 
 function popupHTML(p){
   const t=modeMin(p);
-  return `<b>${p.station||'—'}</b> <span style="color:#888">(${p.net||''})</span><br>
-    ${document.getElementById('mode').value} <b>${t==null?'—':t+' min'}</b><br>
-    <span style="color:#888">transit ${p.commute==null?'—':p.commute+'m'} (ride ${p.ride==null?'—':p.ride}m + walk ${p.walkm==null?'—':p.walkm}m)
+  return `<b>${p.station||'—'}</b> <span style="color:#6b857c">${p.net||''}</span><br>
+    ${document.querySelector('#mode button.on').textContent.toLowerCase()}
+    <b>${t==null?'—':t+' min'}</b><br>
+    <span style="color:#6b857c">transit ${p.commute==null?'—':p.commute+'m'}
     · bike ${p.cycle==null?'—':p.cycle+'m'} · walk ${p.walk==null?'—':p.walk+'m'}</span><br>
-    studio ${capTxt(p.stu,p.stu_cap)}<br>
-    1BR ${capTxt(p.one,p.one_cap)}<br>
-    all units ${capTxt(p.allr,p.allr_cap)}<br>
-    <span style="color:#888;font-size:11px">tract ${p.geoid}${p.trust?'':'<br>⚠ estimate low-confidence'}</span>`;
+    studio ${capTxt(p.stu,p.stu_cap)} · 1BR ${capTxt(p.one,p.one_cap)}`;
 }
 
 function detailHTML(p){
-  return `<div class="t">${p.station||'—'} <span style="color:#888;font-weight:400">${p.net||''}</span></div>
+  const lead = p.one_cap? p.stu : (p.one!=null? p.one : p.stu);
+  const leadLbl = p.one_cap? 'studio' : (p.one!=null? '1BR median' : 'studio median');
+  return `<button class="x" id="dx" aria-label="Close">×</button>
+    <div class="eyebrow">Tract ${p.geoid}</div>
+    <h3>${p.station||'Select a tract'}</h3>
+    <div class="net">${p.net?p.net+' · ':''}${modeMin(p)==null?'no route':modeMin(p)+' min door to door'}</div>
+    <div class="big"><b>${capTxt(lead, p.one_cap||p.stu_cap)}</b><span>${leadLbl}</span></div>
     <div class="kv"><span>Transit</span><b>${p.commute==null?'—':p.commute+' min'}</b></div>
-    <div class="kv"><span>Ride / walk</span><span>${p.ride==null?'—':p.ride}m + ${p.walkm==null?'—':p.walkm}m</span></div>
-    <div class="kv"><span>Bike door-to-door</span><span>${p.cycle==null?'—':p.cycle+' min'}</span></div>
-    <div class="kv"><span>Walk door-to-door</span><span>${p.walk==null?'—':p.walk+' min'}</span></div>
-    <div class="kv"><span>Studio median</span><span>${capTxt(p.stu,p.stu_cap)}</span></div>
-    <div class="kv"><span>1BR median</span><span>${capTxt(p.one,p.one_cap)}</span></div>
-    <div class="kv"><span>All-units median</span><span>${capTxt(p.allr,p.allr_cap)}</span></div>
-    <div class="note">Tract ${p.geoid}. ACS 5-yr 2020–2024, topcoded at $3,501.
-    ${p.trust?'':'⚠ relative MOE too high to trust.'}</div>`;
+    <div class="kv"><span>Ride / walk</span><b>${p.ride==null?'—':p.ride+'m + '+p.walkm+'m'}</b></div>
+    <div class="kv"><span>Studio</span><b>${capTxt(p.stu,p.stu_cap)}</b></div>
+    <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
+    <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
+    <div class="note">ACS 2020–2024 gross rent, median by unit size. Paid, not asking.
+      ${p.trust?'':'⚠ Too few sample units to trust this estimate.'}</div>`;
 }
 
 map.on('load',()=>{
+  // Warm the basemap toward the page paper so the tiles do not read as a grey
+  // slab against the cream chrome, and take out the noise that fights the data:
+  // the residential wash that greys whole cities, street-name and POI labels,
+  // and airport tags. Place names stay — they are the only labels worth keeping
+  // at this scale.
+  try{
+    map.setPaintProperty('background','background-color','#eef0e4');
+    map.setPaintProperty('landuse_residential','fill-opacity',0);
+    map.setPaintProperty('park','fill-color','#e0e8d7');
+    map.setPaintProperty('water','fill-color','#dfe7e3');
+    // Positron paints woods a cool grey and buildings a slightly cooler one;
+    // both read as dirty against cream. Warm them and thin the canopy.
+    map.setPaintProperty('landcover_wood','fill-color','#dbe6d1');
+    map.setPaintProperty('landcover_wood','fill-opacity',
+                         ['interpolate',['linear'],['zoom'],8,0,12,0.38]);
+    map.setPaintProperty('building','fill-color','#f1f0e7');
+    map.setPaintProperty('road_area_pier','fill-color','#f1f0e7');
+    const drop=/^(highway-name-|highway-shield|road_shield|airport|waterway_line_label|poi)/;
+    for(const l of map.getStyle().layers||[]){
+      if(l.type==='symbol' && drop.test(l.id)) map.setLayoutProperty(l.id,'visibility','none');
+      if(l.type==='symbol' && /^label_/.test(l.id)){
+        map.setPaintProperty(l.id,'text-color','#7d8a7c');
+        map.setPaintProperty(l.id,'text-halo-color','rgba(253,252,246,.85)');
+      }
+    }
+  }catch(e){}
+
   map.addSource('tracts',{type:'geojson',data:tractFC()});
   map.addLayer({id:'tracts-fill',type:'fill',source:'tracts',
     paint:{'fill-color':['get','fill'],
-           'fill-opacity':['case',['==',['get','fill'],NONE],0,0.55]}});
+           'fill-opacity':['case',['==',['get','fill'],NONE],0,0.72]}});
   map.addLayer({id:'tracts-line',type:'line',source:'tracts',
     filter:['!=',['get','fill'],NONE],
-    paint:{'line-color':'#0b0e13','line-width':0.75}});
+    paint:{'line-color':'#fdfcf6','line-width':0.7,'line-opacity':0.55}});
+
+  // 3D: the same OpenFreeMap tile source the basemap uses carries
+  // render_height / render_min_height on the building layer (OpenMapTiles
+  // schema), so the city can be extruded without a second tileset or any
+  // footprint download. Flat building fill is hidden while extrusion is on,
+  // otherwise the two z-fight.
+  map.addLayer({id:'buildings-3d',type:'fill-extrusion',source:'openmaptiles',
+    'source-layer':'building',minzoom:12,
+    paint:{
+      'fill-extrusion-color':['interpolate',['linear'],['get','render_height'],
+                              0,'#e6e4d6',20,'#efeddf',80,'#f6f4e9',200,'#fbf9f1'],
+      'fill-extrusion-height':['max',5,['coalesce',['get','render_height'],8]],
+      'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
+      'fill-extrusion-opacity':0.58,
+      'fill-extrusion-vertical-gradient':true}});
+  // Trees go on top of the extrusion: MapLibre depth-tests 3D against 3D, so a
+  // canopy layer beneath the buildings is swallowed whole. Drawn after, the
+  // crowns read the way a tree in front of a facade does in a pitched view.
+  map.addSource('trees',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'trees',type:'circle',source:'trees',minzoom:14.5,
+    paint:{'circle-radius':['interpolate',['linear'],['zoom'],15,2.2,17,4.2,19,6.6],
+           'circle-color':'#588a48','circle-opacity':0.8,'circle-blur':0.2}});
+
+  try{ map.setLayoutProperty('building','visibility','none'); }catch(e){}
+  try{ map.setLight({anchor:'viewport',color:'#fffdf2',intensity:0.42,
+                     position:[1.4,205,32]}); }catch(e){}
+
+  // Streets drawn back over the extruded mass. In a 3D city the basemap's own
+  // road linework is buried under the buildings, and without a street grid the
+  // blocks read as a solid foam model rather than a city.
+  map.addLayer({id:'streets-casing',type:'line',source:'openmaptiles',
+    'source-layer':'transportation',minzoom:11,
+    filter:['in',['get','class'],['literal',['motorway','trunk','primary','secondary',
+                                             'tertiary','minor','street','service']]],
+    paint:{'line-color':'#cfcdbb',
+           'line-width':['interpolate',['linear'],['zoom'],11,0.5,14,1.5,17,4.6,19,9.5],
+           'line-opacity':0.22}});
+  map.addLayer({id:'streets',type:'line',source:'openmaptiles',
+    'source-layer':'transportation',minzoom:11,
+    filter:['in',['get','class'],['literal',['motorway','trunk','primary','secondary',
+                                             'tertiary','minor','street','service']]],
+    paint:{'line-color':['match',['get','class'],
+                          ['motorway','trunk'],'#f6e7c8',
+                          ['primary','secondary'],'#faf2e0',
+                          '#fdfcf6'],
+           'line-width':['interpolate',['linear'],['zoom'],11,0.35,14,1.1,17,3.6,19,7.6],
+           'line-opacity':0.4}});
 
   map.addSource('lines',{type:'geojson',data:lineFC});
-  // Dark casing under every route so parallel lines stay separable against the
-  // choropleth — the same trick the MTA map gets from its white background.
+  // Pale casing under each route: on a light map this is the MTA map's own trick
+  // of separating lines from whatever sits behind them.
   map.addLayer({id:'lines-casing',type:'line',source:'lines',
-    paint:{'line-color':'#0b0e13','line-width':['case',['==',['get','net'],'subway'],6.4,3.4],
-           'line-opacity':0.92}});
+    paint:{'line-color':'#fdfcf6',
+           'line-width':['interpolate',['linear'],['zoom'],9,
+                         ['case',['==',['get','net'],'subway'],2.8,2],14,
+                         ['case',['==',['get','net'],'subway'],8,4.4]],
+           'line-opacity':0.9}});
   map.addLayer({id:'lines',type:'line',source:'lines',
     paint:{'line-color':['get','color'],
-           'line-width':['case',['==',['get','net'],'subway'],3.4,2],
-           'line-opacity':['case',['==',['get','net'],'subway'],0.95,0.7]}});
+           'line-width':['interpolate',['linear'],['zoom'],9,
+                         ['case',['==',['get','net'],'subway'],1.5,1.1],14,
+                         ['case',['==',['get','net'],'subway'],4,2.4]],
+           'line-opacity':['case',['==',['get','net'],'subway'],0.95,0.75]}});
 
   map.addSource('stations',{type:'geojson',data:stnFC});
-  // Station symbol follows the MTA convention: a dot in the serving line's
-  // colour, and a white dot with a dark ring where lines meet.
-  map.addLayer({id:'stations',type:'circle',source:'stations',
-    paint:{'circle-radius':['case',['==',['get','xfer'],true],4.6,3.1],
+  // Station dots are noise at city scale: below z11 the network line pattern
+  // already reads, and 441 named circles collapse into a rash of white rings.
+  map.addLayer({id:'stations',type:'circle',source:'stations',minzoom:11,
+    paint:{'circle-radius':['interpolate',['linear'],['zoom'],
+                            8,['case',['==',['get','xfer'],true],1.9,1.2],
+                            11,['case',['==',['get','xfer'],true],3.4,2.2],
+                            14,['case',['==',['get','xfer'],true],6.4,4.0]],
            'circle-color':['case',['==',['get','xfer'],true],'#ffffff',['get','color']],
-           'circle-stroke-width':['case',['==',['get','xfer'],true],1.6,0.9],
-           'circle-stroke-color':['case',['==',['get','xfer'],true],'#111318','#0b0e13']}});
+           'circle-stroke-width':['case',['==',['get','xfer'],true],1.4,0.9],
+           'circle-stroke-color':['case',['==',['get','xfer'],true],'#254c47','#ffffff']}});
 
   map.on('click','tracts-fill',e=>{
     const p=e.features[0].properties;
-    new maplibregl.Popup({maxWidth:'300px'}).setLngLat(e.lngLat).setHTML(popupHTML(p)).addTo(map);
-    const d=document.getElementById('detail');
-    d.style.display='block'; d.innerHTML=detailHTML(p);
+    openDetail(p);
   });
   map.on('click','stations',e=>{
     const p=e.features[0].properties;
-    new maplibregl.Popup({offset:8,maxWidth:'240px'}).setLngLat(e.lngLat)
-      .setHTML(`<b>${p.name}</b>`+(p.routes?`<br><span style="color:#aaa;font-size:11px">${p.routes}</span>`:'')
-               +`<br><span style="color:#888">${p.min} min to Penn 1</span>`).addTo(map);
+    new maplibregl.Popup({offset:10,maxWidth:'240px'}).setLngLat(e.lngLat)
+      .setHTML(`<b>${p.name}</b>`+(p.routes?`<br><span style="color:#6b857c;font-size:11px">${p.routes}</span>`:'')
+               +`<br><span style="color:#6b857c">${p.min} min to Penn 1</span>`).addTo(map);
   });
   ['tracts-fill','stations'].forEach(id=>{
     map.on('mouseenter',id,()=>{map.getCanvas().style.cursor='pointer';});
@@ -537,15 +855,20 @@ map.on('load',()=>{
   draw();
 });
 
+function openDetail(p){
+  const d=document.getElementById('detail');
+  d.innerHTML=detailHTML(p);
+  d.classList.add('on');
+  const x=document.getElementById('dx');
+  if(x) x.onclick=()=>d.classList.remove('on');
+}
+
 function draw(){
   const {cmax,rmin,rmax}=ctl();
   const onlyB=document.getElementById('onlyBudget').checked;
-  document.getElementById('cmaxv').textContent=cmax+'m';
-  document.getElementById('rminv').textContent='$'+(rmin/1000).toFixed(1)+'k';
-  document.getElementById('rmaxv').textContent='$'+(rmax/1000).toFixed(1)+'k';
   document.getElementById('cmaxlbl').textContent=cmax;
-  document.getElementById('rminlbl').textContent=rmin;
-  document.getElementById('rmaxlbl').textContent=rmax;
+  document.getElementById('rminv').textContent='$'+rmin.toLocaleString();
+  document.getElementById('rmaxv').textContent='$'+rmax.toLocaleString();
 
   if(ready) map.getSource('tracts').setData(tractFC());
 
@@ -559,14 +882,20 @@ function draw(){
       return vals.some(x=>x.v>=rmin&&x.v<=rmax&&x.rel!=null&&x.rel<=meta.max_rel_moe);
     })
     .sort((a,b)=>modeMin(a)-modeMin(b));
-  const tb=document.getElementById('tb');
-  tb.innerHTML=rows.slice(0,400).map(p=>{
-    const st=p.stu_cap?'<span class="p-cap">≥3.5k</span>':money(p.stu);
-    const on=p.one_cap?'<span class="p-cap">≥3.5k</span>':money(p.one);
-    return `<tr data-g="${p.geoid}"><td>${p.station||'—'}</td>
-      <td>${modeMin(p)}m</td><td>${st}</td><td>${on}</td></tr>`;
+
+  document.getElementById('rows').innerHTML=rows.slice(0,400).map(p=>{
+    const st=p.stu_cap?'≥3.5k':money(p.stu).replace('$','');
+    const on=p.one_cap?'≥3.5k':money(p.one).replace('$','');
+    return `<div class="trow" data-g="${p.geoid}">
+      <span><b>${p.station||'—'}</b></span>
+      <span class="m">${modeMin(p)}m</span>
+      <span>${st}</span><span>${on}</span></div>`;
   }).join('');
-  [...tb.querySelectorAll('tr')].forEach(tr=>{
+
+  document.getElementById('count').textContent=
+    rows.length+' tracts in budget at this setting';
+
+  [...document.querySelectorAll('.trow')].forEach(tr=>{
     tr.onclick=()=>{
       const g=tr.dataset.g;
       const f=D.tracts.features.find(x=>x.properties.geoid===g);
@@ -577,14 +906,80 @@ function draw(){
       });})(f.geometry.coordinates);
       if(xs.length){
         map.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],
-                      {maxZoom:14,padding:40});
+                      {maxZoom:14,padding:{top:80,bottom:120,left:420,right:80}});
+        openDetail(f.properties);
       }
     };
   });
 }
 
+/* ---------- chrome ---------- */
+document.querySelectorAll('#tabs button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('.pane').forEach(p=>
+      p.classList.toggle('on',p.id==='pane-'+b.dataset.pane));
+  };
+});
+document.getElementById('toSources').onclick=e=>{
+  e.preventDefault();
+  document.querySelector('#tabs button[data-pane="src"]').click();
+};
+document.getElementById('mode').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#mode button').forEach(x=>x.classList.toggle('on',x===b));
+  draw();
+};
+let is3d=false, auto3d=false, treesLoaded=false;
+
+// Street trees are only legible as a canopy once you are at street scale, and
+// they cost 2.9 MB, so the file is fetched the first time the camera gets
+// close enough to draw them rather than on page load.
+async function loadTrees(){
+  if(treesLoaded) return;
+  treesLoaded=true;
+  try{
+    const d=await (await fetch('trees.json')).json();
+    const xy=d.xy, n=xy.length>>1, f=new Array(n);
+    for(let i=0;i<n;i++) f[i]={type:'Feature',properties:null,
+      geometry:{type:'Point',coordinates:[xy[2*i+1]/1e5,xy[2*i]/1e5]}};
+    map.getSource('trees').setData({type:'FeatureCollection',features:f});
+  }catch(e){ console.warn('trees unavailable',e); }
+}
+function apply3d(on){
+  is3d=on;
+  document.getElementById('btn3d').classList.toggle('on',on);
+  if(ready){
+    map.setLayoutProperty('buildings-3d','visibility',on?'visible':'none');
+    map.setLayoutProperty('building','visibility',on?'none':'visible');
+  }
+  map.easeTo({pitch:on?40:0,duration:700});
+}
+document.getElementById('btn3d').onclick=()=>apply3d(!is3d);
+document.getElementById('btnHome').onclick=()=>map.flyTo({center:HOME.center,zoom:HOME.zoom});
+// The city reads best flat while you are comparing tracts at metro scale, and
+// best extruded once you are down among the buildings. So 3D engages itself the
+// first time the camera passes z14, and the rail button still overrides it.
+map.on('zoomend',()=>{
+  if(map.getZoom()>=13.8) loadTrees();
+  if(!auto3d && map.getZoom()>=14){ auto3d=true; if(!is3d) apply3d(true); }
+});
+document.getElementById('btnIn').onclick=()=>map.zoomIn();
+document.getElementById('btnOut').onclick=()=>map.zoomOut();
+document.getElementById('btnReset').onclick=resetView;
+document.getElementById('resetTop').onclick=resetView;
+function resetView(){
+  document.getElementById('cmax').value=60;
+  document.getElementById('rmin').value=2000;
+  document.getElementById('rmax').value=3000;
+  document.getElementById('onlyBudget').checked=true;
+  document.querySelectorAll('#mode button').forEach((x,i)=>x.classList.toggle('on',i===0));
+  document.getElementById('detail').classList.remove('on');
+  map.flyTo({center:[-73.95,40.78],zoom:10});
+  draw();
+}
+
 ['cmax','rmin','rmax'].forEach(id=>document.getElementById(id).oninput=draw);
-document.getElementById('mode').onchange=draw;
 document.getElementById('onlyBudget').onchange=draw;
 document.getElementById('showLines').onchange=e=>{
   if(!ready) return;

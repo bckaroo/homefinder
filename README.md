@@ -81,6 +81,41 @@ qualify (Eastchester Bay 36005001904, Jamaica Bay 36081099705). Tracts that
 merely *contain* a lot of water — Bay Ridge, Sunset Park, Broad Channel — are
 real neighbourhoods and stay.
 
+## Interface
+
+The shell is modelled on the Allemannsdata Montréal case study: warm paper
+(`#edf0e5`), a teal accent, a serif display face over Public Sans, floating
+cards with a single soft shadow, and a bottom-right detail panel rather than
+map popups. Three tabs — Explore, Shortlist, Sources — share one card.
+
+The basemap is OpenFreeMap `positron`, re-tinted to the page paper: the
+residential wash is switched off, woods warmed, and street-name and POI labels
+dropped so place names are the only text. Tract fills sit at 72% opacity over
+it, with a hairline paper-coloured seam between tracts.
+
+### Depth
+
+Buildings are extruded live from the same OpenFreeMap vector tiles the basemap
+uses — the OpenMapTiles `building` layer carries `render_height` and
+`render_min_height`, so no footprint download and no second tileset. 3D engages
+itself the first time the camera passes z14; the rail button overrides it.
+
+The extrusion is deliberately **58% opaque**: solid enough to read as a city,
+translucent enough that the tract colour underneath still tells you what the
+block costs. Streets are re-drawn over the mass at 40% opacity for the same
+reason — without a street grid the blocks read as foam, and at full opacity the
+grid shoots through the towers and flattens them again.
+
+Street trees are the 2015 NYC Street Tree Census (`uvpi-gqnh`, 683,788 trees),
+decimated 1-in-4 to 170,947 points by `scripts/fetch_trees.py` and fetched
+lazily the first time the camera passes z13.8. The canopy layer sits *above*
+the extrusion: MapLibre depth-tests 3D against 3D, so a layer beneath the
+buildings is swallowed whole, whereas drawn after it the crowns read the way a
+tree in front of a facade does in a pitched view.
+
+MapLibre 4.7 has no `sky` layer type (that arrived in v5), so the horizon is
+just the page background showing through.
+
 ## Layout
 
 ```
