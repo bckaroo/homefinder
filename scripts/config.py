@@ -44,6 +44,15 @@ OUT_TRACT_JOINED = DATA / "tract_joined.csv"
 OUT_SHORTLIST = DATA / "shortlist.csv"
 OUT_TRACT_GEOJSON = DATA / "tracts.geojson"
 OUT_MAP_HTML = WEB / "index.html"
+OUT_COMMUTE_MODES = DATA / "commute_modes.csv"
+OUT_COMMUTE_META = DATA / "commute_modes.meta.json"
+
+# --- street-network router (optional stage: walking and cycling modes) ---
+# Port 3204 is registered in ~/.openclaw/config/ports.json as the `valhalla`
+# service entry. The core pipeline must still reproduce without a running
+# router: build_modes.py is optional and join_all.py degrades to nulls.
+VALHALLA_URL = os.environ.get("VALHALLA_URL", "http://127.0.0.1:3204")
+OSM_DIR = RAW / "osm"
 
 # --- analysis constants ---
 PENN1 = (40.75056, -73.99386)   # 1 Penn Plaza, lat/lon

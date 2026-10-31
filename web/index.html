@@ -45,6 +45,7 @@
     <div id="head">
       <h1>PENN 1 → apartment explorer</h1>
       <div class="sub">Census tracts · commute ≤ <b id="cmaxlbl">60</b> min · rent $<span id="rminlbl">2000</span>–$<span id="rmaxlbl">3000</span></div>
+      <div class="sub" style="margin-top:5px;color:#c98a3a">Rents are ACS 5-yr <b>paid</b> medians, not asking rents. Asking runs 1.4× (Queens) to 2.2× (Manhattan) higher — measured against Zillow ZORI. A tract showing $2,400 here is asking ~$3,400–5,300.</div>
     </div>
     <div id="controls">
       <div class="row"><label for="cmax">Max commute</label>
@@ -75,8 +76,11 @@ const D = {"tracts":{"type":"FeatureCollection","features":[{"type":"Feature","p
 const meta = D.meta;
 
 const map = L.map('map',{zoomControl:true,preferCanvas:true}).setView([40.78,-73.95],10);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  {maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+// Basemap: Esri Dark Gray Canvas. Keyless and tolerant of automated clients.
+// OSM's volunteer tiles return 403 to this browser; CARTO's dark_all now demands
+// an API key. Note the Esri tile URL is {z}/{y}/{x} — y and x are swapped vs Leaflet.
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:16,attribution:'&copy; Esri &copy; OpenStreetMap contributors'}).addTo(map);
 
 // Penn 1 marker
 L.marker([40.75056,-73.99386]).addTo(map).bindPopup('<b>PENN 1</b><br>1 Penn Plaza, 34th St').openPopup();

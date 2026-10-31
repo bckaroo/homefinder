@@ -64,18 +64,22 @@ def main():
     )
     j = j.drop_duplicates(subset=["GEOID"])
 
-    j["walk_min"] = (j["dist_m"] / WALK_MPS / 60).round(1)
-    j["commute_min"] = (j["min"] + j["walk_min"]).round(1)
+    # `station_walk_min` is access to the station, NOT a commute mode. Walking
+    # as a mode is `walk_mode_min`, routed over the street network in
+    # build_modes.py. The names are deliberately distinct: the two numbers
+    # differ by an order of magnitude and confusing them is easy.
+    j["station_walk_min"] = (j["dist_m"] / WALK_MPS / 60).round(1)
+    j["commute_min"] = (j["min"] + j["station_walk_min"]).round(1)
     j["station"] = j["name"]
     j["station_net"] = j["net"]
     # honest travel time: riding only reachable if the walk is plausible
-    j.loc[j["walk_min"] > MAX_WALK_MIN, "commute_min"] = np.nan
+    j.loc[j["station_walk_min"] > MAX_WALK_MIN, "commute_min"] = np.nan
     if isinstance(j, gpd.GeoDataFrame):
         j = j.drop(columns=["geometry"], errors="ignore")
 
     out = pd.DataFrame(j[[
         "GEOID", "STATEFP", "COUNTYFP", "ALAND", "station", "station_net",
-        "min", "walk_min", "commute_min",
+        "min", "station_walk_min", "commute_min",
     ]]).rename(columns={"GEOID": "geoid", "min": "ride_min"})
     out["geoid"] = out["geoid"].astype(str)
     print(f"  tracts with commute: {out.commute_min.notna().sum():,} / {len(out):,}")
@@ -86,6 +90,23 @@ def main():
     rent["geoid"] = rent.geoid.str.zfill(11)
     df = out.merge(rent, on="geoid", how="left", suffixes=("", "_r"))
     print(f"  tracts w/ rent: {df.rent_all.notna().sum():,}")
+
+    # ---- walking and cycling commute modes (optional stage) ----
+    # Absent router output is a legitimate state: the transit artifacts must
+    # reproduce on a machine with no Valhalla running. Nulls, plus a loud hint.
+    if Path(C.OUT_COMMUTE_MODES).exists():
+        modes = pd.read_csv(C.OUT_COMMUTE_MODES, dtype={"geoid": str})
+        modes["geoid"] = modes.geoid.str.zfill(11)
+        df = df.merge(modes, on="geoid", how="left")
+        for col in ("walk_mode_min", "cycle_mode_min"):
+            if col in df.columns:
+                print(f"  tracts w/ {col}: {df[col].notna().sum():,}"
+                      f"  (median {df[col].median():.0f} min)")
+    else:
+        df["walk_mode_min"] = np.nan
+        df["cycle_mode_min"] = np.nan
+        print(f"  no {C.OUT_COMMUTE_MODES.name}: walking/cycling left null")
+        print("    -> run scripts/build_modes.py with Valhalla up to populate them")
 
     # ---- ZORI (uncapped, current) for censor resolution ----
     z = pd.read_csv(C.require(C.ZORI_ZIP, "run scripts/fetch_data.py"))

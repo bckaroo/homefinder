@@ -2,20 +2,38 @@
 
 PROJ-041 · DevOS-tracked.
 
-Housing affordability crossed with peak-hour transit reachability: what does a
-commute to the employment core actually cost you in rent, tract by tract.
+Housing affordability crossed with commute reachability: what does living in a
+place actually cost you in rent and in time, by mode.
 
 ## Scope
 
-1. **Reachability** — build a peak-hour multimodal graph from GTFS feeds (MTA
-   subway, Metro-North, LIRR, PATH), walk transfers at hub stations, Dijkstra
-   from an employment anchor (initially Penn Station).
-2. **Affordability** — ACS 5-year housing cost and income by census tract
-   (B25031, B25064, household income), rent burden computed per tract.
-3. **Score** — combine commute minutes and rent burden into a single sortable
-   score with exposed weights.
-4. **Map** — interactive tract choropleth with toggleable layers, station
-   points, legend, title block, and source note.
+The product is an **apartment-finding tool for the NY metro**: a location is a
+candidate if it reaches work inside a time limit — *by transit, cycling or
+walking* — while clearing a rent ceiling, across a set of factors rather than a
+single accessibility number.
+
+1. **Reachability, per mode.** Peak-hour multimodal GTFS graph (MTA subway,
+   Metro-North, LIRR, PATH) with walk transfers at hub stations and Dijkstra
+   from an employment anchor. Cycling and walking are *separate modes* over the
+   street network, not a speed reduction on the transit result. **Built: transit
+   only.** Cycling/walking are DEV-322.
+2. **Destination.** The anchor is an input, not a constant — the tool answers
+   for *your* workplace. Currently hardcoded to 1 Penn Plaza (DEV-323).
+3. **Affordability** — ACS 5-year housing cost by census tract (B25031, B25064),
+   with coherence and relative-MOE gates. Rent burden needs the income half
+   (DEV-316). Rents are **tract medians, not listing prices**; no listings source
+   is wired.
+4. **Score** — combine commute minutes and rent burden into a sortable score
+   with exposed weights (DEV-318).
+5. **Map and shortlist** — choropleth *plus* a ranked list, mode selector,
+   legend, title block and source note (DEV-319).
+
+### What this does not do
+
+No bus network — outer Queens/Brooklyn tracts inherit their nearest rail
+station's time and read as better commutes than they are. Tracts beyond the
+22-minute walk gate are omitted rather than shown as long commutes. Rents are
+ACS medians with a `>= $3,501` topcode censoring 19.7% of Manhattan tracts.
 
 ## Layout
 

@@ -44,10 +44,13 @@ def main():
     b25064 = b25064.rename(columns={"B25064_E001": "rent_all", "B25064_M001": "rent_all_moe"})
 
     # B25031: E002 studio(no bedroom), E003 1BR, E004 2BR, E005 3BR, E006 4BR, E007 5+BR
-    cols31 = [f"B25031_E00{i}" for i in range(1, 8)] + [f"B25031_M00{i}" for i in (2, 3)]
+    # Every B25031 variable is a MEDIAN GROSS RENT in dollars, not a count.
+    # E001 is the all-sizes median, identical to B25064_E001 (verified across all
+    # 80,142 tracts), so it is not carried separately -- it was previously
+    # renamed to `units_total`, which read as a household count and was not.
+    cols31 = [f"B25031_E00{i}" for i in range(2, 8)] + [f"B25031_M00{i}" for i in (2, 3)]
     b25031 = load_table(C.ACS_5YR_2024_B25031, cols31)
     b25031 = b25031.rename(columns={
-        "B25031_E001": "units_total",
         "B25031_E002": "rent_studio", "B25031_M002": "rent_studio_moe",
         "B25031_E003": "rent_1br", "B25031_M003": "rent_1br_moe",
         "B25031_E004": "rent_2br", "B25031_E005": "rent_3br",

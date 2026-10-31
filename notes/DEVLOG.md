@@ -3,6 +3,86 @@
 Append-only log of each round of development on this repo (part of DevOS
 project **PROJ-041**). New entries go at the top.
 
+## Round 3 — 2026-10-31 · Ownership transfer to xiaogou; scope reframed against the product ask
+
+**Status:** DEV-317 and DEV-321 → DONE. Claimed by `xiaogou` (Hermes).
+DEV-319 claimed; DEV-322 filed READY; DEV-323 filed SPEC.
+
+### Transfer
+
+Andrew handed PROJ-041 from `xiaomao` to `xiaogou` on 2026-10-31. The board came
+over clean: `origin/main` at `15d5528`, no stashes, no unpushed commits. xiaomao
+stood down and confirmed in writing that the repo holds all tracked work and
+that nothing exists outside it except superseded `/tmp` scratch and raw
+downloads.
+
+Ownership was NOT taken on trust. Both REVIEW cards were closed only after the
+new owner re-ran the pipeline himself:
+
+| artifact | md5 | vs DEV-321 baseline |
+|---|---|---|
+| `station_times.csv` | `ef75f7ee` | identical |
+| `graph_stats.json` | `bcdfee28` | identical |
+| `tract_rent.csv` | `faf1938d` | identical |
+| `tract_joined.csv` | `08ba1000` | identical |
+| `shortlist.csv` | `d3294822` | identical (359 rows) |
+| `web/index.html` | `a85a0f45` | identical |
+
+All four stages ran under `/usr/bin/python3` (geopandas 1.1.3) — a different
+interpreter from the one the baseline was produced on. `git status` returned
+zero diffs afterwards, which is the reproduction proof: identical bytes, not a
+passing test suite that tolerates drift.
+
+### Scope reframed
+
+The build answers a narrower question than the product ask. As committed,
+`config.py` pins `PENN1` as an analysis constant and the only commute mode is
+transit; `WALK_MPS`/`MAX_WALK_MIN` are walk-to-station access, not a mode.
+There is no cycling anywhere in the pipeline and no street-network router.
+
+The product is an apartment-finding tool for the NY metro: a place is a
+candidate if it reaches work inside 60 minutes **by transit, cycling or
+walking**, filtered against a rent ceiling, across a set of factors. Filed:
+
+- **DEV-322** (READY) — walking and cycling modes via Valhalla in Docker over a
+  Geofabrik NY-metro extract, with `walk_min` and `cycle_min` as separate
+  columns. Valhalla over OSRM because OSRM's foot profile is a speed-reduced car
+  profile and ignores stairs, footways and turn restrictions. No routing engine
+  is installed and no OSM extract exists on disk, so this is a spike, not a
+  config change.
+- **DEV-323** (SPEC) — a user-supplied destination replacing the hardcoded
+  Penn 1 origin.
+- **DEV-319** broadened in place (not duplicated) to add a mode selector, a
+  ranked shortlist view beside the choropleth, and an on-canvas destination.
+
+### Defects received from the outgoing owner (not previously in this log)
+
+Recorded verbatim in substance, since they are honest gaps in the shipped build:
+
+- ZORI is read by `join_all.py` and used by nothing. The ACS 1-year table was
+  pulled to probe the topcode and then abandoned unused.
+- `MAX_WALK_MIN = 22` nulls `commute_min` for far-from-station tracts, so outer
+  tracts are *absent* from the map rather than shown as long commutes. Reads as
+  a coverage failure to anyone who does not know the gate exists.
+- No bus network: bus-dependent outer Queens/Brooklyn tracts inherit the nearest
+  rail station's time, overstating the real commute.
+- The `>= $3,501` topcode rendering is a decision, not a proof. 19.7% of
+  Manhattan tracts are censored, and any downstream score treating those as
+  "expensive" is inferring from an unknown.
+- Dead code: unused `haversine()` and `Point` import in `join_all.py`; leftover
+  `OUT` in `build_rent.py`. `data/tracts.geojson` is written into `data/` but
+  gitignored, which reads as a tracked artifact and is not.
+
+### Follow-ups
+
+- Bus coverage is the largest single accuracy gap for the outer boroughs and is
+  not yet filed.
+- The censored-tract problem gets worse as modes are added: a tract can be
+  cheap-by-median and unaffordable in fact. Listings-level data would resolve
+  it; ACS medians cannot.
+- No `Makefile`/driver: stage order still matters (running `build_html` before
+  `join_all` silently consumes a stale `tract_joined.csv`).
+
 ## Round 2 — 2026-10-31 · DEV-317: Metro-North reachability bug cleared; pipeline migrated from /tmp
 
 **Status:** DEV-317 → REVIEW. Claimed by `xiaomao`.

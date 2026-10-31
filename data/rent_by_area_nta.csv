@@ -1,0 +1,177 @@
+area_name,area_type,tracts,tracts_1br,br1_p25,br1_med,br1_p75,all_med,med_commute,pct_within_60,pct_in_budget,borough,asking_1br_est
+Soundview-Clason Point,neighbourhood,8,5,576,727,1304,1330,53.9,100.0,0.0,Bronx,1320
+Coney Island-Sea Gate,neighbourhood,12,7,383,870,1114,1065,52.6,64.0,14.0,Brooklyn,1534
+Rockaway Beach-Arverne-Edgemere,neighbourhood,9,5,880,948,1084,1170,61.9,44.0,0.0,Queens,1338
+Crotona Park East,neighbourhood,7,3,1010,1050,1122,1299,35.3,100.0,0.0,Bronx,1906
+Springfield Gardens (North)-Rochdale Village,neighbourhood,6,4,1013,1058,1144,1419,31.2,100.0,0.0,Queens,1493
+Co-op City,neighbourhood,7,7,1055,1139,1190,1351,57.6,57.0,0.0,Bronx,2067
+Morrisania,neighbourhood,7,5,1149,1156,1456,1238,35.0,100.0,0.0,Bronx,2098
+Chinatown-Two Bridges,neighbourhood,7,5,783,1175,1210,1204,21.6,100.0,20.0,Manhattan,2577
+Brownsville,neighbourhood,14,3,798,1184,1413,1082,38.0,100.0,0.0,Brooklyn,2087
+West Farms,neighbourhood,5,5,1187,1206,1616,1323,38.8,100.0,0.0,Bronx,2189
+Mount Eden-Claremont (West),neighbourhood,12,10,1163,1232,1508,1505,29.5,100.0,0.0,Bronx,2236
+Tremont,neighbourhood,9,4,1123,1238,1369,1250,37.4,100.0,0.0,Bronx,2247
+Claremont Village-Claremont (East),neighbourhood,6,4,1189,1272,1350,1242,36.2,100.0,0.0,Bronx,2309
+East Flatbush-Remsen Village,neighbourhood,9,8,1199,1291,1415,1570,39.4,100.0,0.0,Brooklyn,2276
+Ocean Hill,neighbourhood,10,6,1160,1294,1331,1461,33.8,100.0,0.0,Brooklyn,2281
+University Heights (South)-Morris Heights,neighbourhood,13,9,1133,1313,1497,1409,34.4,100.0,0.0,Bronx,2383
+Mott Haven-Port Morris,neighbourhood,15,5,820,1330,1363,1158,31.3,100.0,0.0,Bronx,2414
+East Harlem (South),neighbourhood,11,7,1034,1331,1767,1321,25.4,100.0,0.0,Manhattan,2919
+Westchester Square,neighbourhood,5,5,1330,1365,1538,1660,44.6,100.0,0.0,Bronx,2477
+Mount Hope,neighbourhood,10,10,1288,1378,1455,1441,29.2,100.0,0.0,Bronx,2501
+St. Albans,neighbourhood,23,5,1358,1383,1390,1703,34.2,100.0,0.0,Queens,1951
+South Jamaica,neighbourhood,14,5,963,1383,1393,1849,35.4,100.0,0.0,Queens,1951
+Annadale-Huguenot-Prince's Bay-Woodrow,neighbourhood,7,3,1389,1390,1401,1900,,,0.0,Staten Island,1965
+East Harlem (North),neighbourhood,12,10,1206,1393,1516,1354,28.0,100.0,10.0,Manhattan,3055
+Soundview-Bruckner-Bronx River,neighbourhood,15,14,1193,1396,1541,1502,41.0,100.0,0.0,Bronx,2534
+East New York-City Line,neighbourhood,12,7,1230,1399,1502,1658,40.2,100.0,0.0,Brooklyn,2466
+Laurelton,neighbourhood,11,4,1339,1418,1758,1856,41.1,100.0,25.0,Queens,2001
+Lower East Side,neighbourhood,9,4,1127,1434,1711,1403,19.8,100.0,25.0,Manhattan,3145
+East Flatbush-Rugby,neighbourhood,16,10,1372,1434,1572,1717,47.7,100.0,0.0,Brooklyn,2528
+Williamsbridge-Olinville,neighbourhood,20,14,1322,1434,1571,1578,43.1,100.0,0.0,Bronx,2603
+Eastchester-Edenwald-Baychester,neighbourhood,12,4,1383,1440,1472,1848,52.2,100.0,0.0,Bronx,2614
+Tottenville-Charleston,neighbourhood,4,3,1419,1442,1495,1667,,,0.0,Staten Island,2039
+Harlem (North),neighbourhood,15,12,1174,1444,1955,1411,21.9,100.0,25.0,Manhattan,3167
+South Ozone Park,neighbourhood,25,6,1363,1445,1564,1993,53.2,86.0,0.0,Queens,2039
+East New York (North),neighbourhood,13,8,747,1456,1680,1437,37.5,100.0,0.0,Brooklyn,2567
+Norwood,neighbourhood,8,8,1404,1457,1489,1560,36.8,100.0,0.0,Bronx,2644
+Concourse-Concourse Village,neighbourhood,14,12,1193,1462,1622,1440,27.8,100.0,8.0,Bronx,2654
+Pelham Parkway-Van Nest,neighbourhood,9,9,1432,1463,1573,1767,41.6,100.0,0.0,Bronx,2655
+Castle Hill-Unionport,neighbourhood,9,8,1122,1465,1577,1573,47.2,86.0,0.0,Bronx,2659
+Highbridge,neighbourhood,5,5,1120,1472,1562,1401,32.7,100.0,0.0,Bronx,2672
+Wakefield-Woodlawn,neighbourhood,16,10,1430,1494,1658,1733,44.2,100.0,0.0,Bronx,2712
+New Springville-Willowbrook-Bulls Head-Travis,neighbourhood,9,7,1327,1499,1670,2008,,,0.0,Staten Island,2120
+Belmont,neighbourhood,7,3,1273,1501,1531,1327,35.2,100.0,0.0,Bronx,2724
+Crown Heights (South),neighbourhood,13,12,1466,1510,1745,1641,33.5,100.0,8.0,Brooklyn,2662
+Far Rockaway-Bayswater,neighbourhood,11,6,1418,1510,1584,1446,63.5,36.0,0.0,Queens,2131
+Fordham Heights,neighbourhood,7,6,1421,1516,1570,1572,30.5,100.0,0.0,Bronx,2752
+East Flatbush-Farragut,neighbourhood,14,12,1220,1516,1755,1711,43.2,100.0,8.0,Brooklyn,2673
+University Heights (North)-Fordham,neighbourhood,9,8,1486,1522,1573,1563,37.7,100.0,0.0,Bronx,2762
+East New York-New Lots,neighbourhood,14,9,1246,1526,1627,1580,41.4,100.0,0.0,Brooklyn,2690
+Bedford Park,neighbourhood,11,11,1482,1529,1579,1666,34.8,100.0,0.0,Bronx,2775
+Flatlands,neighbourhood,27,12,1417,1534,1634,1766,53.1,100.0,8.0,Brooklyn,2704
+Midwood,neighbourhood,16,12,1459,1546,1637,1785,42.0,100.0,0.0,Brooklyn,2726
+Bensonhurst,neighbourhood,28,25,1478,1547,1605,1736,45.0,100.0,8.0,Brooklyn,2727
+Gravesend (West),neighbourhood,16,14,1396,1557,1667,1786,48.8,100.0,7.0,Brooklyn,2745
+Allerton,neighbourhood,9,6,1534,1559,1572,1374,44.3,100.0,0.0,Bronx,2830
+Great Kills-Eltingville,neighbourhood,11,4,1383,1560,1698,2064,,,0.0,Staten Island,2206
+Baisley Park,neighbourhood,20,3,930,1565,1859,2135,40.5,100.0,33.0,Queens,2208
+Kingsbridge Heights-Van Cortlandt Village,neighbourhood,6,6,1516,1566,1578,1478,38.6,100.0,0.0,Bronx,2842
+East Flatbush-Erasmus,neighbourhood,11,10,1409,1570,1757,1773,38.3,100.0,0.0,Brooklyn,2768
+New Dorp-Midland Beach,neighbourhood,6,3,1496,1580,1706,2178,,,0.0,Staten Island,2234
+Pelham Bay-Country Club-City Island,neighbourhood,6,5,1511,1581,1620,1990,50.2,80.0,0.0,Bronx,2870
+Madison,neighbourhood,15,10,1439,1587,1686,1708,47.1,100.0,0.0,Brooklyn,2798
+Pomonok-Electchester-Hillcrest,neighbourhood,8,4,1406,1595,1731,1942,42.6,100.0,0.0,Queens,2251
+St. George-New Brighton,neighbourhood,6,4,1586,1597,1617,1372,,,0.0,Staten Island,2258
+Prospect Lefferts Gardens-Wingate,neighbourhood,14,13,1403,1598,1837,1738,34.9,100.0,8.0,Brooklyn,2817
+Richmond Hill,neighbourhood,13,10,1447,1604,1777,1692,29.2,100.0,0.0,Queens,2263
+Brighton Beach,neighbourhood,8,8,1584,1616,1694,1674,47.4,100.0,0.0,Brooklyn,2849
+Gravesend (East)-Homecrest,neighbourhood,18,14,1438,1621,1716,1824,43.4,100.0,0.0,Brooklyn,2858
+Morris Park,neighbourhood,10,8,1570,1623,1692,1800,48.8,100.0,0.0,Bronx,2946
+North Corona,neighbourhood,10,6,1597,1628,1716,1884,22.4,100.0,17.0,Queens,2297
+Sunset Park (East)-Borough Park (West),neighbourhood,10,7,1492,1628,1666,1702,39.8,100.0,0.0,Brooklyn,2870
+Pelham Gardens,neighbourhood,10,4,1503,1630,1752,1946,46.8,90.0,0.0,Bronx,2958
+Flushing-Willets Point,neighbourhood,14,11,1454,1631,1662,1730,28.8,100.0,9.0,Queens,2301
+West New Brighton-Silver Lake-Grymes Hill,neighbourhood,12,7,1582,1639,1716,1741,,,0.0,Staten Island,2318
+Rosebank-Shore Acres-Park Hill,neighbourhood,7,5,1389,1643,1681,1626,,,0.0,Staten Island,2323
+Dyker Heights,neighbourhood,17,14,1480,1644,1800,1833,47.4,100.0,7.0,Brooklyn,2898
+Throgs Neck-Schuylerville,neighbourhood,14,11,1476,1650,1865,1984,54.0,60.0,18.0,Bronx,2995
+Port Richmond,neighbourhood,6,5,1614,1651,1653,1814,,,0.0,Staten Island,2335
+Flatbush,neighbourhood,18,16,1502,1652,1696,1756,37.4,100.0,6.0,Brooklyn,2912
+Kingsbridge-Marble Hill,neighbourhood,5,4,1588,1653,1707,1649,34.9,100.0,0.0,Bronx,3000
+Queens Village,neighbourhood,20,7,1404,1653,1802,2020,39.6,100.0,14.0,Queens,2332
+Melrose,neighbourhood,8,4,1606,1654,1771,1238,28.6,100.0,25.0,Bronx,3002
+Westerleigh-Castleton Corners,neighbourhood,8,3,1594,1656,1778,1846,,,0.0,Staten Island,2342
+Crown Heights (North),neighbourhood,22,21,1319,1656,1918,1957,32.9,100.0,24.0,Brooklyn,2920
+Borough Park,neighbourhood,21,16,1430,1656,1709,1824,40.0,100.0,0.0,Brooklyn,2920
+Grasmere-Arrochar-South Beach-Dongan Hills,neighbourhood,9,6,1608,1669,1777,1633,,,0.0,Staten Island,2360
+Jamaica,neighbourhood,15,12,1566,1682,1812,1850,26.0,100.0,0.0,Queens,2373
+Glendale,neighbourhood,13,8,1513,1686,1780,1981,46.2,100.0,0.0,Queens,2379
+Mapleton-Midwood (West),neighbourhood,16,11,1646,1690,1775,1794,39.7,100.0,9.0,Brooklyn,2979
+Jackson Heights,neighbourhood,20,16,1473,1690,1868,1820,22.5,100.0,19.0,Queens,2385
+Corona,neighbourhood,17,10,1451,1692,2066,1931,25.4,100.0,30.0,Queens,2387
+Sheepshead Bay-Manhattan Beach-Gerritsen Beach,neighbourhood,20,12,1498,1692,1916,1752,50.8,83.0,25.0,Brooklyn,2983
+Woodhaven,neighbourhood,13,8,1511,1695,1754,2040,32.9,100.0,0.0,Queens,2392
+Hollis,neighbourhood,10,5,1402,1696,1710,1712,31.6,100.0,0.0,Queens,2393
+East Elmhurst,neighbourhood,10,5,1534,1700,1819,1921,32.6,100.0,0.0,Queens,2399
+Murray Hill-Broadway Flushing,neighbourhood,15,9,1682,1701,1737,1844,28.8,100.0,11.0,Queens,2400
+Bath Beach,neighbourhood,11,10,1556,1701,1837,1805,51.5,100.0,10.0,Brooklyn,2999
+Middle Village,neighbourhood,14,11,1636,1702,1756,2128,47.1,100.0,0.0,Queens,2402
+Oakland Gardens-Hollis Hills,neighbourhood,5,3,1690,1702,1858,2146,,,33.0,Queens,2402
+Parkchester,neighbourhood,5,5,1632,1705,1712,1744,43.9,100.0,0.0,Bronx,3095
+Breezy Point-Belle Harbor-Rockaway Park-Broad Channel,neighbourhood,7,3,1670,1709,1726,1792,63.9,40.0,0.0,Queens,2411
+South Richmond Hill,neighbourhood,9,4,1675,1712,1802,2030,50.4,100.0,25.0,Queens,2416
+South Williamsburg,neighbourhood,10,3,1657,1713,2018,1818,27.3,100.0,33.0,Brooklyn,3020
+Ozone Park (North),neighbourhood,10,5,1165,1713,1782,1980,43.2,100.0,0.0,Queens,2417
+Bellerose,neighbourhood,6,3,1458,1720,2013,2038,38.1,100.0,33.0,Queens,2427
+Cypress Hills,neighbourhood,14,7,1548,1722,1812,1904,36.3,100.0,14.0,Brooklyn,3036
+Flatbush (West)-Ditmas Park-Parkville,neighbourhood,11,11,1504,1727,1852,1827,36.1,100.0,9.0,Brooklyn,3045
+Ozone Park,neighbourhood,7,4,1635,1732,1894,1869,40.8,100.0,25.0,Queens,2444
+Marine Park-Mill Basin-Bergen Beach,neighbourhood,19,5,1569,1732,1750,2064,55.6,100.0,20.0,Brooklyn,3054
+East Flushing,neighbourhood,14,6,1642,1733,1764,1887,33.5,100.0,0.0,Queens,2445
+Woodside,neighbourhood,14,12,1592,1737,1884,1845,20.8,100.0,17.0,Queens,2451
+Washington Heights (North),neighbourhood,12,11,1572,1743,1968,1751,27.8,100.0,27.0,Manhattan,3822
+Canarsie,neighbourhood,34,13,1533,1748,1989,1827,47.7,100.0,23.0,Brooklyn,3082
+Kew Gardens Hills,neighbourhood,8,8,1625,1752,1798,2016,37.4,100.0,0.0,Queens,2472
+Maspeth,neighbourhood,20,14,1607,1756,1934,2042,49.2,100.0,21.0,Queens,2478
+Auburndale,neighbourhood,13,5,1701,1761,1799,2199,34.7,100.0,0.0,Queens,2485
+Jamaica Hills-Briarwood,neighbourhood,10,6,1745,1766,1874,1835,30.4,100.0,17.0,Queens,2492
+Elmhurst,neighbourhood,23,23,1726,1768,1838,1998,23.2,100.0,9.0,Queens,2495
+Bay Ridge,neighbourhood,28,27,1709,1773,1828,1863,42.9,100.0,0.0,Brooklyn,3126
+Manhattanville-West Harlem,neighbourhood,5,4,1578,1778,1888,1624,21.2,100.0,25.0,Manhattan,3899
+Sunset Park (Central),neighbourhood,14,9,1653,1795,2018,1938,38.6,100.0,33.0,Brooklyn,3165
+Inwood,neighbourhood,6,5,1768,1820,1895,1717,30.8,100.0,20.0,Manhattan,3991
+Kensington,neighbourhood,10,10,1737,1824,1946,1932,33.5,100.0,10.0,Brooklyn,3216
+Whitestone-Beechhurst,neighbourhood,7,3,1650,1832,1850,2171,,,0.0,Queens,2585
+Kew Gardens,neighbourhood,9,7,1830,1837,2020,1934,23.1,100.0,29.0,Queens,2592
+Ridgewood,neighbourhood,19,18,1778,1858,2080,2026,37.7,100.0,28.0,Queens,2622
+Williamsburg,neighbourhood,14,6,1458,1862,2950,2827,23.7,100.0,17.0,Brooklyn,3283
+Sunnyside,neighbourhood,18,13,1815,1868,1963,1946,20.5,100.0,23.0,Queens,2636
+Jamaica Estates-Holliswood,neighbourhood,8,5,1663,1876,1884,1880,36.2,100.0,0.0,Queens,2647
+Washington Heights (South),neighbourhood,11,9,1589,1893,2001,1575,23.7,100.0,33.0,Manhattan,4151
+Rego Park,neighbourhood,8,7,1728,1901,2058,2006,26.2,100.0,43.0,Queens,2682
+Glen Oaks-Floral Park-New Hyde Park,neighbourhood,6,4,1781,1908,2043,2109,38.8,100.0,25.0,Queens,2692
+Astoria (East)-Woodside (North),neighbourhood,14,14,1830,1938,2018,2050,24.8,100.0,36.0,Queens,2735
+Hamilton Heights-Sugar Hill,neighbourhood,7,6,1714,1944,2011,1777,23.7,100.0,33.0,Manhattan,4263
+Riverdale-Spuyten Duyvil,neighbourhood,14,10,1722,1952,2129,1908,43.9,100.0,50.0,Bronx,3543
+Bayside,neighbourhood,13,6,1832,1976,2126,2544,34.5,100.0,50.0,Queens,2788
+Queensbridge-Ravenswood-Dutch Kills,neighbourhood,12,6,1729,2004,2376,2163,25.8,100.0,50.0,Queens,2828
+Queensboro Hill,neighbourhood,5,4,1740,2012,2321,2176,34.4,100.0,50.0,Queens,2839
+Sunset Park (West),neighbourhood,18,11,1730,2034,2306,1854,34.8,100.0,55.0,Brooklyn,3586
+Bedford-Stuyvesant (East),neighbourhood,23,16,1875,2036,2298,2012,31.7,100.0,56.0,Brooklyn,3589
+Astoria (North)-Ditmars-Steinway,neighbourhood,17,16,1892,2049,2232,2251,35.2,100.0,56.0,Queens,2891
+Upper West Side-Manhattan Valley,neighbourhood,6,4,1866,2087,2331,2138,17.9,100.0,50.0,Manhattan,4577
+Forest Hills,neighbourhood,24,19,1881,2139,2224,2153,25.2,100.0,63.0,Queens,3018
+Astoria (Central),neighbourhood,11,11,2059,2140,2233,2238,28.3,100.0,100.0,Queens,3020
+Harlem (South),neighbourhood,10,4,1920,2168,2341,1970,17.6,100.0,75.0,Manhattan,4754
+East Village,neighbourhood,14,10,1274,2174,2694,2338,19.8,100.0,30.0,Manhattan,4768
+Bay Terrace-Clearview,neighbourhood,5,3,2149,2192,2271,2658,,,100.0,Queens,3093
+East Williamsburg,neighbourhood,16,14,1396,2218,2405,2120,25.2,100.0,57.0,Brooklyn,3910
+Morningside Heights,neighbourhood,8,6,1912,2294,2349,2285,18.8,100.0,67.0,Manhattan,5031
+Bushwick (East),neighbourhood,16,10,2078,2309,2628,2054,33.2,100.0,80.0,Brooklyn,4071
+Windsor Terrace-South Slope,neighbourhood,8,6,2274,2348,2364,2452,31.6,100.0,83.0,Brooklyn,4140
+Bedford-Stuyvesant (West),neighbourhood,21,17,2098,2365,2475,2377,29.0,100.0,82.0,Brooklyn,4169
+Bushwick (West),neighbourhood,13,12,2168,2494,2663,2383,29.8,100.0,83.0,Brooklyn,4397
+Greenwich Village,neighbourhood,7,3,2379,2500,2632,2608,12.5,100.0,100.0,Manhattan,5482
+Greenpoint,neighbourhood,15,13,2261,2558,2755,2713,27.3,100.0,100.0,Brooklyn,4510
+Carroll Gardens-Cobble Hill-Gowanus-Red Hook,neighbourhood,21,17,2445,2692,2854,2904,28.9,100.0,82.0,Brooklyn,4746
+Park Slope,neighbourhood,16,15,2546,2694,2964,3104,29.0,100.0,87.0,Brooklyn,4750
+Hell's Kitchen,neighbourhood,10,4,2373,2710,3034,2496,10.7,100.0,50.0,Manhattan,5943
+Clinton Hill,neighbourhood,7,4,2495,2804,3073,2460,26.2,100.0,50.0,Brooklyn,4943
+Old Astoria-Hallets Point,neighbourhood,6,4,2563,2850,3036,2332,37.0,100.0,50.0,Queens,4021
+Upper West Side (Central),neighbourhood,12,9,2679,2851,3114,2877,16.1,100.0,56.0,Manhattan,6252
+Upper East Side-Carnegie Hill,neighbourhood,14,9,2696,2869,2973,3105,21.4,100.0,78.0,Manhattan,6292
+Upper East Side-Yorkville,neighbourhood,14,12,2626,2884,3134,2668,21.8,100.0,58.0,Manhattan,6325
+Brooklyn Heights,neighbourhood,6,5,2273,2900,2917,3118,21.0,100.0,80.0,Brooklyn,5113
+Midtown-Times Square,neighbourhood,14,3,2798,2911,3102,2939,10.6,100.0,67.0,Manhattan,6384
+Upper East Side-Lenox Hill-Roosevelt Island,neighbourhood,14,13,2235,2919,3129,2812,21.2,100.0,54.0,Manhattan,6401
+Prospect Heights,neighbourhood,6,5,2378,2946,3031,2588,28.0,100.0,40.0,Brooklyn,5194
+West Village,neighbourhood,7,4,2945,3006,3019,2848,11.8,100.0,50.0,Manhattan,6592
+Fort Greene,neighbourhood,11,6,2822,3017,3098,2410,25.9,100.0,33.0,Brooklyn,5319
+Gramercy,neighbourhood,4,3,2814,3050,3060,2939,16.6,100.0,33.0,Manhattan,6689
+SoHo-Little Italy-Hudson Square,neighbourhood,6,5,2766,3071,3283,2976,17.7,100.0,20.0,Manhattan,6735
+Upper West Side-Lincoln Square,neighbourhood,11,3,3013,3088,3172,2855,11.9,100.0,33.0,Manhattan,6772
+Downtown Brooklyn-DUMBO-Boerum Hill,neighbourhood,11,3,2984,3136,3160,3124,21.8,100.0,33.0,Brooklyn,5529
+East Midtown-Turtle Bay,neighbourhood,10,8,2987,3146,3352,3120,16.4,100.0,25.0,Manhattan,6899
+Chelsea-Hudson Yards,neighbourhood,13,6,2482,3227,3285,2580,8.3,100.0,17.0,Manhattan,7077
+Murray Hill-Kips Bay,neighbourhood,10,8,2812,3296,3367,3329,21.0,100.0,38.0,Manhattan,7228
