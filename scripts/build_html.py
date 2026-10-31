@@ -151,8 +151,8 @@ TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Penn 1 Apartment Explorer — 60 min</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
  :root{--bg:#0f1115;--panel:#171a21;--ink:#e8eaed;--dim:#9aa4b2;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
  *{box-sizing:border-box}
@@ -185,8 +185,15 @@ TEMPLATE = r"""<!DOCTYPE html>
  .kv{display:flex;justify-content:space-between;padding:2px 0}
  .kv span:first-child{color:var(--dim)}
  .note{color:var(--dim);font-size:11px;margin-top:8px;line-height:1.4}
- .leaflet-popup-content{font-size:12.5px;margin:9px 12px}
- .leaflet-popup-content b{font-size:13px}
+ .maplibregl-popup-content{background:#171a21;color:#e8eaed;font-size:12.5px;
+   padding:9px 12px;border-radius:6px;border:1px solid #262b36;font-family:inherit}
+ .maplibregl-popup-content b{font-size:13px}
+ .maplibregl-popup-tip{border-top-color:#171a21!important;border-bottom-color:#171a21!important}
+ .maplibregl-ctrl-attrib{background:rgba(15,17,21,.82)!important}
+ .maplibregl-ctrl-attrib a{color:#9aa4b2}
+ .maplibregl-ctrl-group{background:#171a21!important;border:1px solid #262b36!important}
+ .maplibregl-ctrl-group button+button{border-top:1px solid #262b36!important}
+ .maplibregl-ctrl-icon{filter:invert(1) brightness(1.6)}
 </style></head><body>
 <div id="wrap">
   <div id="map"></div>
@@ -223,31 +230,39 @@ TEMPLATE = r"""<!DOCTYPE html>
 <script>
 const D = __DATA__;
 const meta = D.meta;
-
-const map = L.map('map',{zoomControl:true,preferCanvas:true}).setView([40.78,-73.95],10);
-// Basemap: Esri Dark Gray Canvas. Keyless and tolerant of automated clients.
-// OSM's volunteer tiles return 403 to this browser; CARTO's dark_all now demands
-// an API key. Note the Esri tile URL is {z}/{y}/{x} — y and x are swapped vs Leaflet.
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-  {maxZoom:16,attribution:'&copy; Esri &copy; OpenStreetMap contributors'}).addTo(map);
-
-// Penn 1 marker
-L.marker([40.75056,-73.99386]).addTo(map).bindPopup('<b>PENN 1</b><br>1 Penn Plaza, 34th St').openPopup();
-
-const lineLayer = L.layerGroup().addTo(map);
-D.lines.forEach(l=>{
-  if(!l.coords || l.coords.length<2) return;
-  L.polyline(l.coords,{color:l.color,weight:2.2,opacity:.75,interactive:false}).addTo(lineLayer);
-});
-
-const stationLayer = L.layerGroup().addTo(map);
 const NETC={subway:'#1f6feb',mnr:'#c1121f',lirr:'#b5179e',path:'#0f766e'};
-D.stations.forEach(s=>{
-  L.circleMarker([s.lat,s.lon],{radius:2.6,color:'#0b0e13',weight:.6,
-    fillColor:NETC[s.net]||'#888',fillOpacity:.95})
-   .bindTooltip(`${s.name} — ${s.min} min`,{direction:'top'})
-   .addTo(stationLayer);
+
+// Basemap: OpenFreeMap vector tiles ("dark" style) rendered by MapLibre GL.
+// Attribution (OpenFreeMap / © OpenMapTiles / © OpenStreetMap) is supplied by
+// the style itself, so it stays correct without hand-maintained credits.
+const map = new maplibregl.Map({
+  container:'map',
+  style:'https://tiles.openfreemap.org/styles/dark',
+  center:[-73.95,40.78],
+  zoom:10,
+  attributionControl:{compact:true}
 });
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-left');
+
+new maplibregl.Marker({color:'#38bdf8'}).setLngLat([-73.99386,40.75056])
+  .setPopup(new maplibregl.Popup({offset:26}).setHTML('<b>PENN 1</b><br>1 Penn Plaza, 34th St'))
+  .addTo(map);
+
+// D.lines coords are [lat,lon] (Leaflet order); GeoJSON wants [lon,lat].
+const lineFC={type:'FeatureCollection',features:D.lines
+  .filter(l=>l.coords&&l.coords.length>1)
+  .map(l=>({type:'Feature',properties:{color:l.color,net:l.net,route:l.route},
+            geometry:{type:'LineString',coordinates:l.coords.map(c=>[c[1],c[0]])}}))};
+
+const stnFC={type:'FeatureCollection',features:D.stations.map(s=>({
+  type:'Feature',properties:{name:s.name,min:s.min,color:NETC[s.net]||'#888'},
+  geometry:{type:'Point',coordinates:[s.lon,s.lat]}}))};
+
+const NONE='#000000';
+let ready=false;
+
+function money(v){return v==null?'—':'$'+v.toLocaleString()}
+function capTxt(v,c){return c?'<span style="color:#fbbf24">≥$3,501</span>':money(v)}
 
 function color(p,cmax,rmin,rmax){
   if(p.commute==null||p.commute>cmax) return null;
@@ -264,12 +279,84 @@ function color(p,cmax,rmin,rmax){
   return '#3b4351';
 }
 
-let tractLayer;
-function money(v){return v==null?'—':'$'+v.toLocaleString()}
+function ctl(){return{
+  cmax:+document.getElementById('cmax').value,
+  rmin:+document.getElementById('rmin').value,
+  rmax:+document.getElementById('rmax').value
+};}
+
+// The fill colour is precomputed per feature and read by the layer expression,
+// which keeps one data-driven fill layer instead of re-adding layers per move.
+function tractFC(){
+  const {cmax,rmin,rmax}=ctl();
+  return {type:'FeatureCollection',features:D.tracts.features.map(f=>({
+    type:'Feature',
+    properties:Object.assign({},f.properties,{fill:color(f.properties,cmax,rmin,rmax)||NONE}),
+    geometry:f.geometry
+  }))};
+}
+
+function popupHTML(p){
+  return `<b>${p.station||'—'}</b> <span style="color:#888">(${p.net||''})</span><br>
+    commute <b>${p.commute==null?'—':p.commute+' min'}</b>
+    <span style="color:#888">(ride ${p.ride}m + walk ${p.walkm}m)</span><br>
+    studio ${capTxt(p.stu,p.stu_cap)}<br>
+    1BR ${capTxt(p.one,p.one_cap)}<br>
+    all units ${capTxt(p.allr,p.allr_cap)}<br>
+    <span style="color:#888;font-size:11px">tract ${p.geoid}${p.trust?'':'<br>⚠ estimate low-confidence'}</span>`;
+}
+
+function detailHTML(p){
+  return `<div class="t">${p.station||'—'} <span style="color:#888;font-weight:400">${p.net||''}</span></div>
+    <div class="kv"><span>Commute</span><b>${p.commute==null?'—':p.commute+' min'}</b></div>
+    <div class="kv"><span>Ride / walk</span><span>${p.ride==null?'—':p.ride}m + ${p.walkm==null?'—':p.walkm}m</span></div>
+    <div class="kv"><span>Studio median</span><span>${capTxt(p.stu,p.stu_cap)}</span></div>
+    <div class="kv"><span>1BR median</span><span>${capTxt(p.one,p.one_cap)}</span></div>
+    <div class="kv"><span>All-units median</span><span>${capTxt(p.allr,p.allr_cap)}</span></div>
+    <div class="note">Tract ${p.geoid}. ACS 5-yr 2020–2024, topcoded at $3,501.
+    ${p.trust?'':'⚠ relative MOE too high to trust.'}</div>`;
+}
+
+map.on('load',()=>{
+  map.addSource('tracts',{type:'geojson',data:tractFC()});
+  map.addLayer({id:'tracts-fill',type:'fill',source:'tracts',
+    paint:{'fill-color':['get','fill'],
+           'fill-opacity':['case',['==',['get','fill'],NONE],0,0.55]}});
+  map.addLayer({id:'tracts-line',type:'line',source:'tracts',
+    filter:['!=',['get','fill'],NONE],
+    paint:{'line-color':'#0b0e13','line-width':0.4}});
+
+  map.addSource('lines',{type:'geojson',data:lineFC});
+  map.addLayer({id:'lines',type:'line',source:'lines',
+    paint:{'line-color':['get','color'],'line-width':2,'line-opacity':0.75}});
+
+  map.addSource('stations',{type:'geojson',data:stnFC});
+  map.addLayer({id:'stations',type:'circle',source:'stations',
+    paint:{'circle-radius':2.6,'circle-color':['get','color'],
+           'circle-stroke-width':0.6,'circle-stroke-color':'#0b0e13'}});
+
+  map.on('click','tracts-fill',e=>{
+    const p=e.features[0].properties;
+    new maplibregl.Popup({maxWidth:'300px'}).setLngLat(e.lngLat).setHTML(popupHTML(p)).addTo(map);
+    const d=document.getElementById('detail');
+    d.style.display='block'; d.innerHTML=detailHTML(p);
+  });
+  map.on('click','stations',e=>{
+    const p=e.features[0].properties;
+    new maplibregl.Popup({offset:8,maxWidth:'240px'}).setLngLat(e.lngLat)
+      .setHTML(`<b>${p.name}</b><br><span style="color:#888">${p.min} min to Penn 1</span>`).addTo(map);
+  });
+  ['tracts-fill','stations'].forEach(id=>{
+    map.on('mouseenter',id,()=>{map.getCanvas().style.cursor='pointer';});
+    map.on('mouseleave',id,()=>{map.getCanvas().style.cursor='';});
+  });
+
+  ready=true;
+  draw();
+});
+
 function draw(){
-  const cmax=+document.getElementById('cmax').value;
-  const rmin=+document.getElementById('rmin').value;
-  const rmax=+document.getElementById('rmax').value;
+  const {cmax,rmin,rmax}=ctl();
   const onlyB=document.getElementById('onlyBudget').checked;
   document.getElementById('cmaxv').textContent=cmax+'m';
   document.getElementById('rminv').textContent='$'+(rmin/1000).toFixed(1)+'k';
@@ -278,40 +365,8 @@ function draw(){
   document.getElementById('rminlbl').textContent=rmin;
   document.getElementById('rmaxlbl').textContent=rmax;
 
-  if(tractLayer) map.removeLayer(tractLayer);
-  tractLayer=L.geoJSON(D.tracts,{
-    style:f=>{
-      const p=f.properties;
-      const c=color(p,cmax,rmin,rmax);
-      return {color:c?'#0b0e13':'transparent',weight:c?0.4:0,
-              fillColor:c||'#000',fillOpacity:c?0.55:0};
-    },
-    onEachFeature:(f,l)=>{
-      const p=f.properties;
-      const capTxt=(x,c)=>c?'<span style="color:#fbbf24">≥$3,501</span>':money(x);
-      l.bindPopup(`<b>${p.station||'—'}</b> <span style="color:#888">(${p.net||''})</span><br>
-        commute <b>${p.commute==null?'—':p.commute+' min'}</b>
-        <span style="color:#888">(ride ${p.ride}m + walk ${p.walkm}m)</span><br>
-        studio ${capTxt(p.stu,p.stu_cap)}<br>
-        1BR ${capTxt(p.one,p.one_cap)}<br>
-        all units ${capTxt(p.allr,p.allr_cap)}<br>
-        <span style="color:#888;font-size:11px">tract ${p.geoid}${p.trust?'':'<br>⚠ estimate low-confidence'}</span>`);
-      l.on('click',()=>{
-        const d=document.getElementById('detail');
-        d.style.display='block';
-        d.innerHTML=`<div class="t">${p.station||'—'} <span style="color:#888;font-weight:400">${p.net||''}</span></div>
-          <div class="kv"><span>Commute</span><b>${p.commute==null?'—':p.commute+' min'}</b></div>
-          <div class="kv"><span>Ride / walk</span><span>${p.ride==null?'—':p.ride}m + ${p.walkm==null?'—':p.walkm}m</span></div>
-          <div class="kv"><span>Studio median</span><span>${capTxt(p.stu,p.stu_cap)}</span></div>
-          <div class="kv"><span>1BR median</span><span>${capTxt(p.one,p.one_cap)}</span></div>
-          <div class="kv"><span>All-units median</span><span>${capTxt(p.allr,p.allr_cap)}</span></div>
-          <div class="note">Tract ${p.geoid}. ACS 5-yr 2020–2024, topcoded at $3,501.
-          ${p.trust?'':'⚠ relative MOE too high to trust.'}</div>`;
-      });
-    }
-  }).addTo(map);
+  if(ready) map.getSource('tracts').setData(tractFC());
 
-  // table
   const rows=D.tracts.features.map(f=>f.properties)
     .filter(p=>p.commute!=null&&p.commute<=cmax)
     .filter(p=>{
@@ -333,29 +388,28 @@ function draw(){
     tr.onclick=()=>{
       const g=tr.dataset.g;
       const f=D.tracts.features.find(x=>x.properties.geoid===g);
-      if(!f) return;
-      const c=f.geometry.coordinates;
-      let xs=[],ys=[];
-      const walk=arr=>arr.forEach(pt=>{
+      if(!f||!ready) return;
+      const xs=[],ys=[];
+      (function walk(a){a.forEach(pt=>{
         if(typeof pt[0]==='number'){xs.push(pt[0]);ys.push(pt[1]);} else walk(pt);
-      });
-      walk(c);
+      });})(f.geometry.coordinates);
       if(xs.length){
-        map.fitBounds([[Math.min(...ys),Math.min(...xs)],[Math.max(...ys),Math.max(...xs)]],{maxZoom:14});
+        map.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],
+                      {maxZoom:14,padding:40});
       }
     };
   });
 }
 
 ['cmax','rmin','rmax'].forEach(id=>document.getElementById(id).oninput=draw);
-['onlyBudget','showLines','showStations'].forEach(id=>{
-  document.getElementById(id).onchange=e=>{
-    if(e.target.id==='showLines'){ e.target.checked?map.addLayer(lineLayer):map.removeLayer(lineLayer); }
-    else if(e.target.id==='showStations'){ e.target.checked?map.addLayer(stationLayer):map.removeLayer(stationLayer); }
-    else draw();
-  };
-});
-draw();
+document.getElementById('onlyBudget').onchange=draw;
+document.getElementById('showLines').onchange=e=>{
+  if(ready) map.setLayoutProperty('lines','visibility',e.target.checked?'visible':'none');
+};
+document.getElementById('showStations').onchange=e=>{
+  if(ready) map.setLayoutProperty('stations','visibility',e.target.checked?'visible':'none');
+};
+
 </script></body></html>"""
 
 

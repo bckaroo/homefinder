@@ -180,3 +180,28 @@ Coherence (1BR ≥ 90% of studio, rejected 224 tracts) + relative MOE ≤ 0.30
   station_times.csv, 1085 stations). Not yet moved in — DEV-317 covers the
   migration and the open Metro-North reachability bug (0/114 MNR stations
   reachable from Penn despite 8,276 peak trips loading).
+
+## Round 2 — 2026-10-31 · Rent reporting + OpenFreeMap basemap
+- `report_areas.py`: ACS 1BR medians aggregated to 176 NTAs and 26 counties.
+  Verified B25031 carries only medians (E001–E007), cross-checked against
+  B25064 across 80,142 tracts — identical to the dollar. Removed `units_total`,
+  which was B25031_E001 duplicated under a count-like name.
+- Measured the paid-vs-asking gap from ZORI per borough rather than assuming
+  it: Manhattan 2.19x, Bronx 1.81x, Brooklyn 1.76x, Queens 1.41x, metro 1.42x.
+  `asking_1br_est` carries the estimate; the UI states the ratio in the header.
+- **Basemap history, so nobody re-treads it:** CARTO `dark_all` now returns
+  "API KEY REQUIRED" on every tile (silently — no console error, just
+  watermarked tiles). OSM's volunteer tiles return 403 to any automated
+  browser. Both were verified by screenshot, not by assumption.
+- Now on **OpenFreeMap** (`tiles.openfreemap.org/styles/dark`) via **MapLibre
+  GL 4.7.1**, which is what OFM serves — vector tiles only, so Leaflet cannot
+  consume them. Attribution comes from the style: OpenFreeMap / OpenMapTiles /
+  OpenStreetMap.
+- Choropleth is one fill layer keyed on a per-feature `fill` property, so
+  slider moves mutate source data instead of rebuilding layers.
+- Verification needs WebGL: the harness browser has none, so the render check
+  runs Playwright + SwiftShader (`--enable-unsafe-swiftshader`). A plain
+  `--screenshot` with `--virtual-time-budget` fires before `map.on('load')`
+  and produces a blank map — that is a harness artifact, not a page bug.
+- Still open: walk/cycle modes (Valhalla tiles building), bus network, income
+  half of DEV-316, NTA-level map layer.
