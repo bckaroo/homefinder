@@ -65,7 +65,8 @@ manufactures short commutes for rural tracts.
 
 ## Stage 4 — map (`scripts/build_html.py`)
 
-Self-contained Leaflet app, ~1.6 MB, no server needed.
+Static MapLibre GL JS 6.16.0 app. The engine is an ES module, so the page is
+served over http (`scripts/serve.py`, port 3118) rather than opened from disk.
 
 Colour logic, evaluated per tract:
 

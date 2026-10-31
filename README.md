@@ -113,8 +113,16 @@ the extrusion: MapLibre depth-tests 3D against 3D, so a layer beneath the
 buildings is swallowed whole, whereas drawn after it the crowns read the way a
 tree in front of a facade does in a pitched view.
 
-MapLibre 4.7 has no `sky` layer type (that arrived in v5), so the horizon is
-just the page background showing through.
+The engine is **MapLibre GL JS 6.16.0**, vendored into `web/vendor/` so the page
+does not depend on a CDN at runtime. v6 is published as an ES module only
+(`maplibre-gl.mjs` + its `maplibre-gl-worker.mjs`), which has two consequences:
+the app script is `type="module"`, and the page must be served over http —
+opening `web/index.html` from disk fails with a CORS error on the import.
+`scripts/serve.py` (systemd: `housing-explorer.service`, port 3118) serves the
+build and registers the `.mjs` MIME type that `python3 -m http.server` omits.
+
+v6 also brings the `sky` layer the v4 build could not have, so the horizon now
+carries the same paper-toned haze the rest of the shell uses.
 
 ## Layout
 

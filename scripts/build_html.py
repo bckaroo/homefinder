@@ -298,11 +298,11 @@ TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Housing Explorer — an open data rent map</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231f4d3d'/%3E%3Cpath d='M2 11h12M4 8h8M6 5h4' stroke='%23fdfcf6' stroke-width='1.4'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link rel="stylesheet" href="./vendor/maplibre-gl.css"/>
 <style>
  :root{
    --paper:#edf0e5; --card:#fdfcf6; --card-2:#f6f7ef; --line:#dfe3d6;
@@ -612,7 +612,8 @@ TEMPLATE = r"""<!DOCTYPE html>
   Census ACS 2020–2024 · ZORI
 </div>
 
-<script>
+<script type="module">
+import * as maplibregl from './vendor/maplibre-gl.mjs';
 const D = __DATA__;
 const meta = D.meta;
 const NETC={subway:'#1f6feb',mnr:'#c1121f',lirr:'#b5179e',path:'#0f766e'};
@@ -628,6 +629,7 @@ const map = new maplibregl.Map({
   bearing:0,
   attributionControl:false
 });
+window.__map = map;   // QA hook: pitch/zoom assertions from scripts/check_render.py
 
 const HOME={center:[-73.99386,40.75056],zoom:12.4};
 
@@ -786,6 +788,12 @@ map.on('load',()=>{
   try{ map.setLayoutProperty('building','visibility','none'); }catch(e){}
   try{ map.setLight({anchor:'viewport',color:'#fffdf2',intensity:0.42,
                      position:[1.4,205,32]}); }catch(e){}
+  // MapLibre 6 paints an atmosphere behind the scene; v4 had no sky layer at
+  // all. Kept to the paper palette so the horizon reads as haze, not weather.
+  try{ map.setSky({'sky-color':'#dfe7dc','horizon-color':'#f6f5ea',
+                   'fog-color':'#e9ece1','sky-horizon-blend':0.55,
+                   'horizon-fog-blend':0.5,'fog-ground-blend':0.85,
+                   'atmosphere-blend':['interpolate',['linear'],['zoom'],10,1,13,0.25]}); }catch(e){}
 
   // Streets drawn back over the extruded mass. In a 3D city the basemap's own
   // road linework is buried under the buildings, and without a street grid the
