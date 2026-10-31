@@ -40,6 +40,17 @@ ACS medians with a `>= $3,501` topcode censoring 19.7% of Manhattan tracts.
 Bike/walk times are free-flow street-network estimates with no weather, traffic
 or e-bike assumptions, and only exist inside the 30 km routing radius.
 
+Census tracts that are essentially water — harbour, bay and sound tracts with
+`AWATER / (ALAND + AWATER) >= 0.90` — are removed from the map selection
+(`config.WATER_SHARE_MAX`). ACS still tabulates a rent median for them and the
+router still returns a commute from their centroid, so left in they shade open
+water and offer a "neighbourhood" nobody can live in. Two tracts in the current
+extent qualify (Eastchester Bay 36005001904, Jamaica Bay 36081099705). Tracts
+that merely *contain* a lot of water — Bay Ridge, Sunset Park, Broad Channel —
+are real neighbourhoods and stay. The tract geometry itself is not clipped:
+the cartographic boundary tracts already follow the shoreline, so no river or
+bay is shaded once the water tracts are gone.
+
 ## Layout
 
 ```

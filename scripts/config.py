@@ -64,6 +64,7 @@ PARENT_LINK_SECONDS = 30        # platform <-> station container
 MAX_WALK_MIN = 22               # beyond this a station does not serve the tract
 TOPCAP = 3501.0                 # ACS rent topcode; never render as a real number
 MAX_REL_MOE = 0.30              # ACS usability threshold (relative MOE)
+WATER_SHARE_MAX = 0.90          # tracts >= this share water are water bodies, not neighbourhoods
 BUDGET_LO, BUDGET_HI = 2000, 3000
 
 

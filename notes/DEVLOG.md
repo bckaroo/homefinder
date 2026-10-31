@@ -240,3 +240,22 @@ zero page errors, all three modes shade correctly. A plain headless browser has
 no WebGL, so `new maplibregl.Map()` throws there and the whole script never
 reaches `draw()` — harness artifact, not a page bug, and the reason the render
 check must pass `--enable-unsafe-swiftshader`.
+
+## Water-body tracts removed from the selection
+
+Two mapped tracts were essentially water — 36005001904 (Eastchester Bay) and
+36081099705 (Jamaica Bay), each >90% `AWATER` — and both were shaded: ACS still
+tabulates a rent median for a harbour tract and Valhalla still returns a commute
+from its centroid. Rule: `AWATER / (ALAND + AWATER) >= config.WATER_SHARE_MAX`
+(0.90) drops the tract at map build, with the count reported in
+`meta.water_tracts_removed` so the figure in the page is auditable.
+
+The threshold is deliberately high. At 0.5 it would delete Bay Ridge, Sunset
+Park, Pelham Bay and Broad Channel — real neighbourhoods with a shoreline — so
+the gate is checked against the ranked list, not just the water share.
+
+No geometry clipping was needed. An A/B render (tracts drawn under the basemap
+`water` fill vs. on top) showed the cartographic boundary tracts already follow
+the shoreline: the bays were only shaded because of those two water tracts, and
+putting the choropleth under the style's opaque landuse layers cost most of its
+legibility. Reverted; geometry unchanged.

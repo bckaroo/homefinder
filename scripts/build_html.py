@@ -48,15 +48,30 @@ def main():
     print("loading geometry...")
     g = gpd.read_file(C.require(C.CB_TRACT_NY, "run scripts/fetch_data.py"))
     nj = gpd.read_file(C.require(C.CB_TRACT_NJ, "run scripts/fetch_data.py"))
-    geo = pd.concat([g[["GEOID", "geometry"]], nj[["GEOID", "geometry"]]], ignore_index=True)
+    cols = ["GEOID", "ALAND", "AWATER", "geometry"]
+    geo = pd.concat([g[cols], nj[cols]], ignore_index=True)
     geo = gpd.GeoDataFrame(geo, geometry="geometry", crs=4326)
     geo["GEOID"] = geo.GEOID.astype(str)
+
+    # Census tracts that are essentially water (harbour, bay, sound) carry no
+    # housing, yet ACS still tabulates a rent median for them and the routing
+    # stage still returns a commute from their centroid. Shading one puts a
+    # neighbourhood on open water, so they are removed from the selection.
+    # Tracts that merely *contain* a lot of water (Bay Ridge, Sunset Park,
+    # Broad Channel) stay: those are real neighbourhoods with a shoreline.
+    tot = geo.ALAND + geo.AWATER
+    geo["water_share"] = (geo.AWATER / tot.replace(0, np.nan)).fillna(0.0)
+    water_body = geo.water_share >= C.WATER_SHARE_MAX
+    dropped = set(geo.GEOID[water_body])
+    geo = geo[~water_body]
 
     # Keep every tract with at least one way of reaching Penn 1; walk/cycle
     # alone is a valid answer for tracts the transit graph cannot serve.
     keep = df[df[["commute_min", "walk_mode_min", "cycle_mode_min"]].notna().any(axis=1)].copy()
     m = geo.merge(keep, left_on="GEOID", right_on="geoid", how="inner")
-    print(f"  map features: {len(m)}")
+    n_water = len(dropped & set(keep.geoid))
+    print(f"  map features: {len(m)} (water-body tracts removed: {n_water}, "
+          f">= {C.WATER_SHARE_MAX:.0%} water)")
 
     # simplify hard to keep the file small
     m["geometry"] = m.geometry.simplify(0.0012, preserve_topology=True)
@@ -131,7 +146,8 @@ def main():
                 for _, r in st.iterrows() if r["name"] and str(r["name"]) != "nan"]
 
     meta = {"zori_month": "2026-09-30", "acs_vintage": "2017-2021..2020-2024 (5yr 2024)",
-            "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE}
+            "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE,
+            "water_share_max": C.WATER_SHARE_MAX, "water_tracts_removed": n_water}
 
     html = render(gj, lines, stations, meta)
     C.ensure_dirs()
