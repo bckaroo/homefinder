@@ -44,6 +44,7 @@ AREAWATER_DIR = RAW / "areawater"   # per-county TIGER AREAWATER, fetched on dem
 SIMPLIFY_M = 15                    # metres; street-scale simplification for the web map
 WATER_BUFFER_M = 25                # cut water outward so no hairline of colour sits on it
 MIN_PART_M2 = 5000                 # drop speck islands from clipped tracts
+MIN_STREAM_M2 = 200_000            # H3010 polygons above this are rivers, below it drains
 
 # --- derived outputs (committed) ---
 OUT_STATION_TIMES = DATA / "station_times.csv"

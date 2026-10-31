@@ -34,9 +34,14 @@ from shapely.geometry import mapping
 import config as C
 
 # MTFCC codes in TIGER AREAWATER that read as "water body" on this map.
-# H3010 (stream/river as a polygon) is deliberately excluded: it is a drainage
-# line, and subtracting it cuts a ragged channel through every block it grazes.
 WATER_MTFCC = ("H2030", "H2040", "H2051", "H2053", "H2081")
+# Rivers live in H3010 (Stream/River) alongside brook-sized drainage polygons,
+# and in New York the *big* rivers are H3010: the Hudson is 13.6 km2 of H3010,
+# the East River 8.0 km2. Excluding H3010 outright left both rivers unclipped,
+# which is exactly the bug this floor replaces dropping the class entirely.
+# So take H3010 only when the polygon is big enough to be a river rather than a
+# drain, so a creek crossing a block does not shave a channel through it.
+STREAM_MTFCC = "H3010"
 
 # EPSG:32618 (UTM 18N) covers NYC and the NJ/NY metro: metres for simplification.
 UTM = 32618
@@ -54,17 +59,23 @@ def _read_tracts() -> gpd.GeoDataFrame:
     return geo.to_crs(UTM)
 
 
-def _county_water(fips: str) -> shapely.Geometry:
+def _county_water(fips: str, buffer_m: float = 0.0) -> shapely.Geometry:
     """Union of big water polygons for one county, in UTM metres."""
     path = C.AREAWATER_DIR / f"tl_2024_{fips}_areawater.zip"
     if not path.exists():
         _fetch_areawater(fips)
-    w = gpd.read_file(path)
-    w = w[w.MTFCC.isin(WATER_MTFCC)].to_crs(UTM)
+    w = gpd.read_file(path).to_crs(UTM)
+    # Area floors only make sense once projected: `w.area` in degrees is
+    # meaningless. Big rivers (Hudson, East River, Harlem) clear the floor by
+    # orders of magnitude; storm drains and brooks do not.
+    keep = w.MTFCC.isin(WATER_MTFCC) | (
+        (w.MTFCC == STREAM_MTFCC) & (w.area >= C.MIN_STREAM_M2)
+    )
+    w = w[keep]
     if w.empty:
         return shapely.GeometryCollection()
     geom = shapely.union_all(shapely.make_valid(w.geometry.values))
-    return geom.buffer(C.WATER_BUFFER_M, quad_segs=2)
+    return geom.buffer(buffer_m, quad_segs=2) if buffer_m else geom
 
 
 def _fetch_areawater(fips: str) -> None:
@@ -126,7 +137,7 @@ def build(keep: pd.DataFrame, log=print):
     fips_col = m.geoid.str[:5]
     before = len(m)
     for fips in sorted(fips_col.unique()):
-        water = _county_water(fips)
+        water = _county_water(fips, buffer_m=C.WATER_BUFFER_M)
         if water.is_empty:
             continue
         idx = m.index[fips_col == fips]
@@ -153,6 +164,23 @@ def build(keep: pd.DataFrame, log=print):
     except Exception as exc:  # geometry that is not a clean coverage
         log(f"  coverage simplify unavailable ({exc}); falling back to per-feature")
         m["geometry"] = m.geometry.simplify(C.SIMPLIFY_M, preserve_topology=True)
+    # Second pass: simplify at 15 m pulls a long shoreline back over the water
+    # by up to the tolerance (a 15 m band along eight kilometres of Manhattan
+    # waterfront is ~0.12 km2 of colour floating on the river). Re-cut exactly
+    # at the water edge so the only error left points *away* from the water.
+    for fips in sorted(fips_col.unique()):
+        water = _county_water(fips, buffer_m=0)
+        if water.is_empty:
+            continue
+        idx = m.index[fips_col == fips]
+        cut = shapely.difference(
+            shapely.make_valid(m.loc[idx, "geometry"].values), water
+        )
+        m.loc[idx, "geometry"] = [
+            _drop_small_parts(g, C.MIN_PART_M2) for g in cut
+        ]
+    m = m[m.geometry.notna() & ~m.geometry.is_empty].copy()
+
     m = m.to_crs(4326)
 
     log(f"  water clipping dropped {before - len(m)} tracts that were water only")

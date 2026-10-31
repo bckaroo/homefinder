@@ -275,8 +275,16 @@ shared edge, so neighbours still abut exactly.
 
 Water: TIGER tracts are not coast-clipped, so the cut is ours to do. Restricted
 to MTFCC H2030/H2040/H2051/H2053/H2081 (lake, reservoir, bay/estuary, ocean,
-glacier) and buffered 25 m outward. H3010 stream polygons are excluded on
-purpose — subtracting drainage linework shreds every block it touches.
+Water is cut twice: before simplification with a 25 m outward buffer (so no
+hairline of colour sits on the basemap water), then again exactly at the water
+edge after simplification, because a 15 m tolerance pulls a long shoreline back
+over the river by up to 15 m.
+
+**Rivers are H3010.** TIGER files the Hudson (13.6 km2) and East River
+(8.0 km2) as Stream/River — the same MTFCC as brook-sized drains — so the first
+cut, which skipped H3010 wholesale, left both rivers unclipped and colour ran
+across the Hudson. H3010 is now taken above a 0.2 km2 area floor
+(`config.MIN_STREAM_M2`): rivers in, drains out.
 Per-county AREAWATER is fetched lazily; 14 counties, 2.8 MB of zips, no manual
 step.
 

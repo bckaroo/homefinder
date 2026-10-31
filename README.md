@@ -60,10 +60,17 @@ adjacent tracts keep identical edges and no gaps open. See `scripts/geo_prep.py`
 shoreline tract's polygon runs out over the harbour. `geo_prep` subtracts
 TIGER AREAWATER — ocean, bay, lake and reservoir polygons only, buffered 25 m
 outward so no hairline of colour is left sitting on the basemap's water.
-Drainage-line polygons (MTFCC H3010, streams) are deliberately excluded: they
-are linework, and subtracting them shaves a ragged channel through every block
-they graze. Per-county AREAWATER zips are fetched on demand into
-`data/raw/areawater/` (14 counties, 2.8 MB).
+Rivers need care: TIGER files **the Hudson (13.6 km²) and East River (8.0 km²)
+as H3010, the same class as brook-sized drains**. Excluding that class leaves
+both rivers unclipped — colour painted across the Hudson — while subtracting all
+of it shaves a channel through every block a creek grazes. So H3010 is taken
+only above a 0.2 km² area floor (`config.MIN_STREAM_M2`): rivers in, drains out.
+
+Simplification runs after the cut, and a 15 m tolerance pulls a long shoreline
+back over the water by up to 15 m — roughly 0.12 km² along the Manhattan
+waterfront alone. So the water is cut twice: once buffered 25 m before
+simplification, then exactly at the water edge afterwards. The only error left
+points away from the water.
 
 **Water-body tracts.** Tracts that are essentially water — `AWATER / (ALAND +
 AWATER) >= 0.90` (`config.WATER_SHARE_MAX`) — are removed from the selection
