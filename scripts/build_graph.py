@@ -10,18 +10,21 @@ Fixes vs v1:
    cross-feed walking transfers at <=600m between HUB stations (GCT<->42St, Penn<->PATH).
  - Reject negative/invalid times; clamp absurd ride times.
 """
-import pandas as pd, numpy as np, heapq, json, math, os
+import pandas as pd, numpy as np, heapq, json, math, os, sys
 from collections import defaultdict
+from pathlib import Path
 
-FEEDS = {
-    "subway": "/tmp/gtfs_mta_subway",
-    "mnr":    "/tmp/gtfs_mnr",
-    "lirr":   "/tmp/gtfs_lirr",
-    "path":   "/tmp/gtfs_path",
-}
-PENN1 = (40.75056, -73.99386)
-PEAK_START, PEAK_END = 7*3600, 9*3600
-OUT = "/tmp/penn_maps/data"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config as C
+
+FEEDS = {k: str(v) for k, v in C.FEEDS.items()}
+PENN1 = C.PENN1
+PEAK_START, PEAK_END = C.PEAK_START, C.PEAK_END
+OUT = str(C.DATA)
+ORIGIN_RADIUS_M = C.ORIGIN_RADIUS_M
+CROSS_FEED_RADIUS_M = C.CROSS_FEED_RADIUS_M
+WALK_MPS = C.WALK_MPS
+PARENT_LINK_SECONDS = C.PARENT_LINK_SECONDS
 
 R_EARTH = 6371000.0
 
@@ -72,8 +75,8 @@ def build_edges():
                 continue
             sid, par = str(r["stop_id"]), str(p).strip()
             u, v = (net, sid), (net, par)
-            adj[u][v] = min(adj[u].get(v, 10**9), 30)
-            adj[v][u] = min(adj[v].get(u, 10**9), 30)
+            adj[u][v] = min(adj[u].get(v, 10**9), PARENT_LINK_SECONDS)
+            adj[v][u] = min(adj[v].get(u, 10**9), PARENT_LINK_SECONDS)
             n_parent += 1
     print(f"  parent-station links: {n_parent}")
     for net, d in FEEDS.items():
@@ -136,8 +139,9 @@ def build_edges():
     return adj, stats
 
 
-def cross_feed_links(stops, radius=600):
+def cross_feed_links(stops, radius=None):
     """Walking transfers between DIFFERENT feeds (hub connections)."""
+    radius = CROSS_FEED_RADIUS_M if radius is None else radius
     n = len(stops)
     la = np.radians([s["lat"] for s in stops])
     lo = np.radians([s["lon"] for s in stops])
@@ -167,7 +171,7 @@ def main():
     adj, stats = build_edges()
 
     # cross-feed transfers
-    print("Cross-feed walking transfers (<=600m)...")
+    print(f"Cross-feed walking transfers (<={CROSS_FEED_RADIUS_M}m)...")
     idx = {(s["net"], s["stop_id"]): i for i, s in enumerate(stops)}
     nets = [s["net"] for s in stops]
     la = np.radians([s["lat"] for s in stops])
@@ -177,10 +181,10 @@ def main():
         dlat = la - la[i]; dlon = lo - lo[i]
         a = np.sin(dlat/2)**2 + math.cos(la[i])*np.cos(la)*np.sin(dlon/2)**2
         dist = 2*R_EARTH*np.arcsin(np.sqrt(np.clip(a, 0, 1)))
-        for j in np.where(dist <= 600)[0]:
+        for j in np.where(dist <= CROSS_FEED_RADIUS_M)[0]:
             if j == i or nets[j] == nets[i]:
                 continue
-            walk = max(60, int(dist[j] / 1.35))
+            walk = max(60, int(dist[j] / WALK_MPS))
             t = stops[j]
             # CRITICAL: edge targets must be fully-qualified (net, stop_id). Feed stop_id
             # namespaces overlap (23 of MNR's 114 ids are also valid subway ids), so storing
@@ -192,13 +196,13 @@ def main():
             added += 2
     print(f"  {added} directed cross-feed edges")
 
-    # origins: everything within 900m of Penn 1 (Penn is a huge complex)
+    # origins: everything within ORIGIN_RADIUS_M of Penn 1 (Penn is a huge complex)
     origins = []
     for s in stops:
         d = haversine(PENN1[0], PENN1[1], s["lat"], s["lon"])
-        if d <= 900:
-            origins.append(((s["net"], s["stop_id"]), max(60, int(d/1.35))))
-    print(f"  {len(origins)} origin stops within 900m of Penn 1")
+        if d <= ORIGIN_RADIUS_M:
+            origins.append(((s["net"], s["stop_id"]), max(60, int(d/WALK_MPS))))
+    print(f"  {len(origins)} origin stops within {ORIGIN_RADIUS_M}m of Penn 1")
     from collections import Counter
     print("   by feed:", dict(Counter(k[0] for k, _ in origins)))
 
@@ -233,9 +237,9 @@ def main():
     r60 = df[df["min"] <= 60]
     print(f"\nWithin 60 min: {len(r60)}")
     print(r60.groupby("net").size().to_string())
-    df.to_csv(f"{OUT}/station_times.csv", index=False)
-    json.dump(stats, open(f"{OUT}/graph_stats.json","w"), indent=2)
-    print(f"\nwrote {OUT}/station_times.csv")
+    df.to_csv(C.OUT_STATION_TIMES, index=False)
+    json.dump(stats, open(C.OUT_GRAPH_STATS, "w"), indent=2)
+    print(f"\nwrote {C.OUT_STATION_TIMES}")
 
 if __name__ == "__main__":
     main()

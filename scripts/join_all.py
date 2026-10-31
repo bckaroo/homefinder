@@ -3,14 +3,18 @@
 Phase 3: join transit time + tract rent -> tract-level dataset + Andrew's shortlist.
 Handles ACS $3,501 topcoding explicitly rather than silently rendering a fake number.
 """
-import pandas as pd, numpy as np, geopandas as gpd, json, math, os
+import pandas as pd, numpy as np, geopandas as gpd, json, math, os, sys
+from pathlib import Path
 from shapely.geometry import Point
 
-OUT = "/tmp/penn_maps/data"
-PENN1 = (40.75056, -73.99386)   # lat, lon
-TOPCAP = 3501.0
-WALK_MPS = 1.35                 # ~4.9 km/h
-MAX_WALK_MIN = 22               # beyond this, a "walkable" station claim is dishonest
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config as C
+
+OUT = str(C.DATA)
+PENN1 = C.PENN1
+TOPCAP = C.TOPCAP
+WALK_MPS = C.WALK_MPS
+MAX_WALK_MIN = C.MAX_WALK_MIN
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -22,25 +26,17 @@ def haversine(lat1, lon1, lat2, lon2):
 
 
 def main():
-    stations = pd.read_csv(f"{OUT}/station_times.csv")
+    stations = pd.read_csv(C.require(C.OUT_STATION_TIMES, "run scripts/build_graph.py first"))
     stations["net"] = stations["net"].astype(str)
     stations["stop_id"] = stations["stop_id"].astype(str)
     print(f"stations: {len(stations)}  (<=60min: {(stations['min']<=60).sum()})")
 
     # ---- tracts: NY + NJ counties inside the 60-min envelope ----
-    g = gpd.read_file("/tmp/cb_tract_36.zip")
-    g = g.to_crs(32618)
+    g = gpd.read_file(C.require(C.CB_TRACT_NY, "run scripts/fetch_data.py")).to_crs(32618)
 
     # NJ tracts (Hudson, Essex, Union, Bergen, Middlesex, Passaic, Morris)
     print("loading NJ tracts...")
-    try:
-        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
-    except Exception:
-        import urllib.request
-        url = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_34_tract_500k.zip"
-        urllib.request.urlretrieve(url, "/tmp/cb_2023_34_tract_500k.zip")
-        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
-    nj = nj.to_crs(32618)
+    nj = gpd.read_file(C.require(C.CB_TRACT_NJ, "run scripts/fetch_data.py")).to_crs(32618)
     print(f"  NY tracts {len(g)}, NJ tracts {len(nj)}")
 
     frames = []
@@ -85,13 +81,14 @@ def main():
     print(f"  tracts with commute: {out.commute_min.notna().sum():,} / {len(out):,}")
 
     # ---- rent ----
-    rent = pd.read_csv(f"{OUT}/tract_rent.csv", dtype={"geoid": str})
+    rent = pd.read_csv(C.require(C.OUT_TRACT_RENT, "run scripts/build_rent.py first"),
+                       dtype={"geoid": str})
     rent["geoid"] = rent.geoid.str.zfill(11)
     df = out.merge(rent, on="geoid", how="left", suffixes=("", "_r"))
     print(f"  tracts w/ rent: {df.rent_all.notna().sum():,}")
 
     # ---- ZORI (uncapped, current) for censor resolution ----
-    z = pd.read_csv("/tmp/zori_zip.csv")
+    z = pd.read_csv(C.require(C.ZORI_ZIP, "run scripts/fetch_data.py"))
     zcols = [c for c in z.columns if c.startswith("20")]
     z["zip"] = z.RegionName.astype(str).str.zfill(5)
     zori = z[["zip", zcols[-1]]].rename(columns={zcols[-1]: "zori"})
@@ -126,20 +123,23 @@ def main():
 
     df["verdict"] = df.apply(verdict, axis=1)
 
-    df.to_csv(f"{OUT}/tract_joined.csv", index=False)
-    print(f"\nwrote {OUT}/tract_joined.csv  ({len(df):,} rows)")
+    df.to_csv(C.OUT_TRACT_JOINED, index=False)
+    print(f"\nwrote {C.OUT_TRACT_JOINED}  ({len(df):,} rows)")
 
     print("\n=== VERDICT (all tracts with commute) ===")
     c = df[df.commute_min.notna()]
     print(c.verdict.value_counts().to_string())
 
-    print("\n=== Andrew's shortlist: <=60min & in budget ===")
-    short = c[(c.verdict == "in_budget")].copy()
-    short = short.sort_values(["rent_1br", "commute_min"], na_position="last")
-    print(f"n = {len(short)}")
-    show = short[["geoid", "station", "commute_min", "rent_studio", "rent_1br", "rent_all"]].head(30)
+    # NOTE: shortlist.csv is owned by build_html.py, which applies the reliability
+    # gates (coherence + relative MOE). Writing an ungated shortlist here produced a
+    # second, contradictory file on disk. Deliberately not written from this stage —
+    # one writer per artifact. This stage emits tract_joined.csv only.
+    print("\n=== in-budget candidates (pre-gate; build_html.py writes the gated shortlist) ===")
+    cand = c[(c.verdict == "in_budget")].copy()
+    cand = cand.sort_values(["rent_1br", "commute_min"], na_position="last")
+    print(f"n = {len(cand)}  (ungated — expect fewer after reliability gates)")
+    show = cand[["geoid", "station", "commute_min", "rent_studio", "rent_1br", "rent_all"]].head(15)
     print(show.to_string(index=False))
-    short.to_csv(f"{OUT}/shortlist.csv", index=False)
 
 
 if __name__ == "__main__":

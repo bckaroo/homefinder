@@ -3,17 +3,22 @@
 Phase 4: build the deliverable — self-contained Leaflet HTML with embedded GeoJSON.
 Adds reliability gates so the shortlist only shows tracts the data can actually support.
 """
-import pandas as pd, numpy as np, geopandas as gpd, json, os
+import pandas as pd, numpy as np, geopandas as gpd, json, os, sys
+from pathlib import Path
 from shapely.geometry import mapping
 
-OUT = "/tmp/penn_maps/data"
-TOPCAP = 3501.0
-MAX_REL_MOE = 0.30      # ACS guidance: estimate unusable above 30% CV-ish relative MOE
-WALK_LIMIT = 22
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config as C
+
+OUT = str(C.DATA)
+TOPCAP = C.TOPCAP
+MAX_REL_MOE = C.MAX_REL_MOE
+WALK_LIMIT = C.MAX_WALK_MIN
 
 
 def main():
-    df = pd.read_csv(f"{OUT}/tract_joined.csv", dtype={"geoid": str})
+    df = pd.read_csv(C.require(C.OUT_TRACT_JOINED, "run scripts/join_all.py first"),
+                     dtype={"geoid": str})
     df["geoid"] = df.geoid.str.zfill(11)
 
     # ---- reliability gates ----
@@ -41,15 +46,8 @@ def main():
 
     # ---- geometry for the map ----
     print("loading geometry...")
-    g = gpd.read_file("/tmp/cb_tract_36.zip")
-    try:
-        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
-    except Exception:
-        import urllib.request
-        urllib.request.urlretrieve(
-            "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_34_tract_500k.zip",
-            "/tmp/cb_2023_34_tract_500k.zip")
-        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
+    g = gpd.read_file(C.require(C.CB_TRACT_NY, "run scripts/fetch_data.py"))
+    nj = gpd.read_file(C.require(C.CB_TRACT_NJ, "run scripts/fetch_data.py"))
     geo = pd.concat([g[["GEOID", "geometry"]], nj[["GEOID", "geometry"]]], ignore_index=True)
     geo = gpd.GeoDataFrame(geo, geometry="geometry", crs=4326)
     geo["GEOID"] = geo.GEOID.astype(str)
@@ -84,7 +82,7 @@ def main():
         feats.append({"type": "Feature", "properties": props, "geometry": mapping(r.geometry)})
 
     gj = {"type": "FeatureCollection", "features": feats}
-    gp = f"{OUT}/tracts.geojson"
+    gp = str(C.OUT_TRACT_GEOJSON)
     json.dump(gj, open(gp, "w"), separators=(",", ":"))
     print(f"  wrote {gp}  ({os.path.getsize(gp)/1e6:.1f} MB)")
 
@@ -93,8 +91,7 @@ def main():
     lines = []
     NET_COLOR = {"subway": "#1f6feb", "mnr": "#c1121f", "lirr": "#b5179e", "path": "#0f766e"}
     NET_LABEL = {"subway": "Subway", "mnr": "Metro-North", "lirr": "LIRR", "path": "PATH"}
-    FEEDS = {"subway": "/tmp/gtfs_mta_subway", "mnr": "/tmp/gtfs_mnr",
-             "lirr": "/tmp/gtfs_lirr", "path": "/tmp/gtfs_path"}
+    FEEDS = {k: str(v) for k, v in C.FEEDS.items()}
     routes = {"subway": "routes.txt", "mnr": "routes.txt",
               "lirr": "routes.txt", "path": "routes.txt"}
     for net_name, d in FEEDS.items():
@@ -120,7 +117,7 @@ def main():
     print(f"  {len(lines)} route lines")
 
     # ---- stations within 60 min ----
-    st = pd.read_csv(f"{OUT}/station_times.csv")
+    st = pd.read_csv(C.require(C.OUT_STATION_TIMES, "run scripts/build_graph.py first"))
     st = st[st["min"] <= 60]
     stations = [{"name": str(r["name"]).strip(), "net": r.net,
                  "lat": round(float(r.lat), 5), "lon": round(float(r.lon), 5),
@@ -131,15 +128,16 @@ def main():
             "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE}
 
     html = render(gj, lines, stations, meta)
-    open("/tmp/penn_maps/index.html", "w").write(html)
-    print(f"  wrote /tmp/penn_maps/index.html ({len(html)/1e6:.1f} MB)")
+    C.ensure_dirs()
+    open(C.OUT_MAP_HTML, "w").write(html)
+    print(f"  wrote {C.OUT_MAP_HTML} ({len(html)/1e6:.1f} MB)")
 
     # ---- shortlist table ----
     short = short.sort_values(["commute_min", "rent_1br"], na_position="last")
     cols = ["geoid", "station", "station_net", "commute_min", "rent_studio", "rent_1br",
             "rel_moe_1br", "rent_all"]
-    short[cols].to_csv(f"{OUT}/shortlist.csv", index=False)
-    print(f"\nshortlist n={len(short)} -> {OUT}/shortlist.csv")
+    short[cols].to_csv(C.OUT_SHORTLIST, index=False)
+    print(f"\nshortlist n={len(short)} -> {C.OUT_SHORTLIST}")
     print(short[["station", "commute_min", "rent_studio", "rent_1br"]].head(20).to_string(index=False))
 
 

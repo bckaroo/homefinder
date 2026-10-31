@@ -6,10 +6,15 @@ B25064 = median gross rent, all units.
 
 ACS tables are keyless bulk .dat downloads from www2.census.gov.
 """
-import pandas as pd, numpy as np, json, os
+import pandas as pd, numpy as np, json, os, sys
+from pathlib import Path
 
-OUT = "/tmp/penn_maps/data"
-os.makedirs(OUT, exist_ok=True)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config as C
+
+OUT = str(C.DATA)
+
+
 
 NYC_COUNTIES = {"36061", "36047", "36081", "36085", "36005"}  # Man, Bk, Qns, SI, Bx
 NEARBY = NYC_COUNTIES | {
@@ -19,8 +24,8 @@ NEARBY = NYC_COUNTIES | {
 }
 
 
-def load_table(fname, cols):
-    p = f"/tmp/{fname}"
+def load_table(path, cols):
+    p = C.require(path, "run scripts/fetch_data.py to download ACS tables")
     df = pd.read_csv(p, sep="|", dtype=str, low_memory=False)
     df["GEO_ID"] = df["GEO_ID"].astype(str)
     for c in cols:
@@ -35,12 +40,12 @@ def load_table(fname, cols):
 
 def main():
     print("Loading ACS 5-yr 2024 rent tables...")
-    b25064 = load_table("b25064_5y2024.dat", ["B25064_E001", "B25064_M001"])
+    b25064 = load_table(C.ACS_5YR_2024_B25064, ["B25064_E001", "B25064_M001"])
     b25064 = b25064.rename(columns={"B25064_E001": "rent_all", "B25064_M001": "rent_all_moe"})
 
     # B25031: E002 studio(no bedroom), E003 1BR, E004 2BR, E005 3BR, E006 4BR, E007 5+BR
     cols31 = [f"B25031_E00{i}" for i in range(1, 8)] + [f"B25031_M00{i}" for i in (2, 3)]
-    b25031 = load_table("b25031_5y2024.dat", cols31)
+    b25031 = load_table(C.ACS_5YR_2024_B25031, cols31)
     b25031 = b25031.rename(columns={
         "B25031_E001": "units_total",
         "B25031_E002": "rent_studio", "B25031_M002": "rent_studio_moe",
@@ -62,8 +67,8 @@ def main():
     for c in [c for c in df.columns if c.startswith(("rent_", "units_"))]:
         df.loc[df[c] < 0, c] = np.nan
 
-    df.to_csv(f"{OUT}/tract_rent.csv", index=False)
-    print(f"  wrote {OUT}/tract_rent.csv")
+    df.to_csv(C.OUT_TRACT_RENT, index=False)
+    print(f"  wrote {C.OUT_TRACT_RENT}")
 
     nyc = df[df["county"].isin(NYC_COUNTIES)]
     print(f"\nNYC tracts: {len(nyc)}")

@@ -11,6 +11,13 @@ venv/
 .env.*
 *.log
 .DS_Store
+
+# raw inputs are downloaded by scripts/fetch_data.py — never committed
 data/raw/
 data/cache/
 *.zip
+*.dat
+*.part
+
+# regenerable build artifact — derived from tract_joined.csv + data/raw boundaries
+data/tracts.geojson

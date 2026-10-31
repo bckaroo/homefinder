@@ -1,0 +1,75 @@
+"""
+Repo-relative configuration for the transit-housing-analysis-map pipeline.
+
+Every stage reads inputs from, and writes outputs to, paths derived from the
+repo root — never from /tmp. Raw downloads live in data/raw/ (gitignored);
+derived outputs live in data/ (committed).
+
+Override the repo root with TRANSTH_MAP_ROOT if running from elsewhere.
+"""
+import os
+from pathlib import Path
+
+# scripts/config.py -> repo root is two levels up
+ROOT = Path(os.environ.get("TRANSTH_MAP_ROOT", Path(__file__).resolve().parent.parent)).resolve()
+
+# --- directories ---
+DATA = ROOT / "data"
+RAW = DATA / "raw"          # gitignored: GTFS zips, ACS .dat, shapefiles, ZORI
+GTFS = RAW / "gtfs"         # extracted GTFS feeds
+DOCS = ROOT / "docs"
+WEB = ROOT / "web"
+
+# --- feed directories (extracted) ---
+FEEDS = {
+    "subway": GTFS / "mta_subway",
+    "mnr":    GTFS / "mta_mnr",
+    "lirr":   GTFS / "mta_lirr",
+    "path":   GTFS / "path",
+}
+
+# --- raw input files ---
+ACS_5YR_2024_B25064 = RAW / "acsdt5y2024-b25064.dat"
+ACS_5YR_2024_B25031 = RAW / "acsdt5y2024-b25031.dat"
+GEOS_2023_5YR = RAW / "Geos20235YR.txt"
+ZORI_ZIP = RAW / "Zip_zori_uc_sfrcondomfr_sm_month.csv"
+CB_TRACT_NY = RAW / "cb_2023_36_tract_500k.zip"
+CB_TRACT_NJ = RAW / "cb_2023_34_tract_500k.zip"
+
+# --- derived outputs (committed) ---
+OUT_STATION_TIMES = DATA / "station_times.csv"
+OUT_GRAPH_STATS = DATA / "graph_stats.json"
+OUT_TRACT_RENT = DATA / "tract_rent.csv"
+OUT_TRACT_JOINED = DATA / "tract_joined.csv"
+OUT_SHORTLIST = DATA / "shortlist.csv"
+OUT_TRACT_GEOJSON = DATA / "tracts.geojson"
+OUT_MAP_HTML = WEB / "index.html"
+
+# --- analysis constants ---
+PENN1 = (40.75056, -73.99386)   # 1 Penn Plaza, lat/lon
+PEAK_START, PEAK_END = 7 * 3600, 9 * 3600
+ORIGIN_RADIUS_M = 900           # stops within this of Penn 1 seed Dijkstra
+CROSS_FEED_RADIUS_M = 600       # walking transfer between different feeds
+WALK_MPS = 1.35                 # ~4.9 km/h
+PARENT_LINK_SECONDS = 30        # platform <-> station container
+MAX_WALK_MIN = 22               # beyond this a station does not serve the tract
+TOPCAP = 3501.0                 # ACS rent topcode; never render as a real number
+MAX_REL_MOE = 0.30              # ACS usability threshold (relative MOE)
+BUDGET_LO, BUDGET_HI = 2000, 3000
+
+
+def ensure_dirs():
+    """Create output directories; safe to call repeatedly."""
+    for d in (DATA, RAW, GTFS, WEB):
+        d.mkdir(parents=True, exist_ok=True)
+
+
+def require(path, hint=""):
+    """Fail loudly with a helpful message when a required input is missing."""
+    if not Path(path).exists():
+        raise FileNotFoundError(
+            f"required input missing: {path}"
+            + (f"\n  {hint}" if hint else "")
+            + f"\n  run: python3 scripts/fetch_data.py"
+        )
+    return Path(path)
