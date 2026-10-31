@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""
+Phase 3: join transit time + tract rent -> tract-level dataset + Andrew's shortlist.
+Handles ACS $3,501 topcoding explicitly rather than silently rendering a fake number.
+"""
+import pandas as pd, numpy as np, geopandas as gpd, json, math, os
+from shapely.geometry import Point
+
+OUT = "/tmp/penn_maps/data"
+PENN1 = (40.75056, -73.99386)   # lat, lon
+TOPCAP = 3501.0
+WALK_MPS = 1.35                 # ~4.9 km/h
+MAX_WALK_MIN = 22               # beyond this, a "walkable" station claim is dishonest
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat, dlon = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dlon/2)**2
+    return 2*R*math.asin(math.sqrt(min(1.0, a)))
+
+
+def main():
+    stations = pd.read_csv(f"{OUT}/station_times.csv")
+    stations["net"] = stations["net"].astype(str)
+    stations["stop_id"] = stations["stop_id"].astype(str)
+    print(f"stations: {len(stations)}  (<=60min: {(stations['min']<=60).sum()})")
+
+    # ---- tracts: NY + NJ counties inside the 60-min envelope ----
+    g = gpd.read_file("/tmp/cb_tract_36.zip")
+    g = g.to_crs(32618)
+
+    # NJ tracts (Hudson, Essex, Union, Bergen, Middlesex, Passaic, Morris)
+    print("loading NJ tracts...")
+    try:
+        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
+    except Exception:
+        import urllib.request
+        url = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_34_tract_500k.zip"
+        urllib.request.urlretrieve(url, "/tmp/cb_2023_34_tract_500k.zip")
+        nj = gpd.read_file("/tmp/cb_2023_34_tract_500k.zip")
+    nj = nj.to_crs(32618)
+    print(f"  NY tracts {len(g)}, NJ tracts {len(nj)}")
+
+    frames = []
+    for frame in (g, nj):
+        f = frame[["GEOID", "STATEFP", "COUNTYFP", "ALAND", "geometry"]].copy()
+        f["GEOID"] = f["GEOID"].astype(str)
+        frames.append(f)
+    tracts = pd.concat(frames, ignore_index=True)
+    tracts = gpd.GeoDataFrame(tracts, geometry="geometry", crs=32618)
+
+    stations_g = gpd.GeoDataFrame(
+        stations, geometry=gpd.points_from_xy(stations.lon, stations.lat), crs=4326
+    ).to_crs(32618)
+
+    # ---- nearest reachable station per tract centroid ----
+    cents = tracts.copy()
+    cents["geometry"] = cents.geometry.representative_point()
+    reach = stations_g[(stations_g["min"] <= 60) & stations_g["min"].notna()].copy()
+    print(f"reachable stations <=60min: {len(reach)}")
+
+    print("nearest station join...")
+    j = gpd.sjoin_nearest(
+        cents, reach[["net", "stop_id", "name", "min", "lat", "lon", "geometry"]],
+        how="left", distance_col="dist_m",
+    )
+    j = j.drop_duplicates(subset=["GEOID"])
+
+    j["walk_min"] = (j["dist_m"] / WALK_MPS / 60).round(1)
+    j["commute_min"] = (j["min"] + j["walk_min"]).round(1)
+    j["station"] = j["name"]
+    j["station_net"] = j["net"]
+    # honest travel time: riding only reachable if the walk is plausible
+    j.loc[j["walk_min"] > MAX_WALK_MIN, "commute_min"] = np.nan
+    if isinstance(j, gpd.GeoDataFrame):
+        j = j.drop(columns=["geometry"], errors="ignore")
+
+    out = pd.DataFrame(j[[
+        "GEOID", "STATEFP", "COUNTYFP", "ALAND", "station", "station_net",
+        "min", "walk_min", "commute_min",
+    ]]).rename(columns={"GEOID": "geoid", "min": "ride_min"})
+    out["geoid"] = out["geoid"].astype(str)
+    print(f"  tracts with commute: {out.commute_min.notna().sum():,} / {len(out):,}")
+
+    # ---- rent ----
+    rent = pd.read_csv(f"{OUT}/tract_rent.csv", dtype={"geoid": str})
+    rent["geoid"] = rent.geoid.str.zfill(11)
+    df = out.merge(rent, on="geoid", how="left", suffixes=("", "_r"))
+    print(f"  tracts w/ rent: {df.rent_all.notna().sum():,}")
+
+    # ---- ZORI (uncapped, current) for censor resolution ----
+    z = pd.read_csv("/tmp/zori_zip.csv")
+    zcols = [c for c in z.columns if c.startswith("20")]
+    z["zip"] = z.RegionName.astype(str).str.zfill(5)
+    zori = z[["zip", zcols[-1]]].rename(columns={zcols[-1]: "zori"})
+    zori_month = zcols[-1]
+
+    # ---- censoring flag ----
+    df["rent_all_capped"] = df["rent_all"] >= TOPCAP
+    df["rent_studio_capped"] = df["rent_studio"] >= TOPCAP
+    df["rent_1br_capped"] = df["rent_1br"] >= TOPCAP
+
+    # ---- budget logic ----
+    LO, HI = 2000, 3000
+
+    def verdict(row):
+        st, one = row["rent_studio"], row["rent_1br"]
+        st_cap, one_cap = row["rent_studio_capped"], row["rent_1br_capped"]
+        # any uncapped value in budget?
+        ok = False
+        if pd.notna(st) and not st_cap and LO <= st <= HI:
+            ok = True
+        if pd.notna(one) and not one_cap and LO <= one <= HI:
+            ok = True
+        if ok:
+            return "in_budget"
+        if (st_cap or one_cap):
+            return "over_budget_capped"
+        if pd.notna(st) and pd.notna(one) and st < LO and one < LO:
+            return "under_budget"
+        if pd.notna(st) and pd.notna(one) and st > HI and one > HI:
+            return "over_budget"
+        return "mixed"
+
+    df["verdict"] = df.apply(verdict, axis=1)
+
+    df.to_csv(f"{OUT}/tract_joined.csv", index=False)
+    print(f"\nwrote {OUT}/tract_joined.csv  ({len(df):,} rows)")
+
+    print("\n=== VERDICT (all tracts with commute) ===")
+    c = df[df.commute_min.notna()]
+    print(c.verdict.value_counts().to_string())
+
+    print("\n=== Andrew's shortlist: <=60min & in budget ===")
+    short = c[(c.verdict == "in_budget")].copy()
+    short = short.sort_values(["rent_1br", "commute_min"], na_position="last")
+    print(f"n = {len(short)}")
+    show = short[["geoid", "station", "commute_min", "rent_studio", "rent_1br", "rent_all"]].head(30)
+    print(show.to_string(index=False))
+    short.to_csv(f"{OUT}/shortlist.csv", index=False)
+
+
+if __name__ == "__main__":
+    main()

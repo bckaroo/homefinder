@@ -1,0 +1,22 @@
+{
+  "subway": {
+    "peak_trips": 2825,
+    "edges": 78614,
+    "transfers": 150
+  },
+  "mnr": {
+    "peak_trips": 8276,
+    "edges": 89740,
+    "transfers": 0
+  },
+  "lirr": {
+    "peak_trips": 599,
+    "edges": 5653,
+    "transfers": 0
+  },
+  "path": {
+    "peak_trips": 2461,
+    "edges": 14134,
+    "transfers": 0
+  }
+}
