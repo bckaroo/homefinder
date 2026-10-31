@@ -3,7 +3,7 @@
 Phase 4: build the deliverable — self-contained Leaflet HTML with embedded GeoJSON.
 Adds reliability gates so the shortlist only shows tracts the data can actually support.
 """
-import pandas as pd, numpy as np, geopandas as gpd, json, os, sys
+import pandas as pd, numpy as np, geopandas as gpd, json, os, sys, shapely
 from pathlib import Path
 from shapely.geometry import mapping
 
@@ -84,9 +84,39 @@ def main():
     lines = []
     NET_COLOR = {"subway": "#1f6feb", "mnr": "#c1121f", "lirr": "#b5179e", "path": "#0f766e"}
     NET_LABEL = {"subway": "Subway", "mnr": "Metro-North", "lirr": "LIRR", "path": "PATH"}
+    SUBWAY_MAP = {  # the MTA printed-map palette, keyed by route bullet
+        "1": "EE352E", "2": "EE352E", "3": "EE352E",
+        "4": "00933C", "5": "00933C", "6": "00933C", "6X": "00933C",
+        "7": "B933AD", "7X": "B933AD",
+        "A": "0039A6", "C": "0039A6", "E": "0039A6",
+        "B": "FF6319", "D": "FF6319", "F": "FF6319", "FX": "FF6319", "M": "FF6319",
+        "G": "6CBE45", "J": "996633", "Z": "996633", "L": "A7A9AC",
+        "N": "FCCC0A", "Q": "FCCC0A", "R": "FCCC0A", "W": "FCCC0A",
+        "S": "808183", "SS": "808183",
+    }
     FEEDS = {k: str(v) for k, v in C.FEEDS.items()}
     routes = {"subway": "routes.txt", "mnr": "routes.txt",
               "lirr": "routes.txt", "path": "routes.txt"}
+    # Official MTA line colours come straight out of the feed: routes.txt
+    # carries route_color (EE352E for the 1/2/3, 0039A6 for the A/C/E, ...), so
+    # there is no hand-maintained palette to drift. NET_COLOR is only the
+    # fallback for feeds that ship no colour, and the marker for MNR/LIRR/PATH.
+    def _hex(c):
+        c = str(c or "").strip().lstrip("#")
+        return f"#{c}" if len(c) == 6 else None
+
+    route_info = {}
+    for net_name, d in FEEDS.items():
+        try:
+            rt = pd.read_csv(f"{d}/routes.txt", dtype=str).fillna("")
+        except Exception:
+            continue
+        for r in rt.itertuples():
+            route_info[(net_name, str(r.route_id))] = {
+                "short": str(getattr(r, "route_short_name", "") or "").strip(),
+                "color": _hex(getattr(r, "route_color", "")) or NET_COLOR[net_name],
+            }
+
     for net_name, d in FEEDS.items():
         try:
             sh = pd.read_csv(f"{d}/shapes.txt", dtype={"shape_id": str})
@@ -105,17 +135,140 @@ def main():
                 continue
             coords = [[round(float(y), 5), round(float(x), 5)]
                       for x, y in zip(pts.shape_pt_lon, pts.shape_pt_lat)][::3]
-            lines.append({"net": net_name, "route": str(rid),
-                          "color": NET_COLOR[net_name], "coords": coords})
+            info = route_info.get((net_name, str(rid)), {})
+            label = info.get("short") or str(rid)
+            hexc = SUBWAY_MAP.get(label) if net_name == "subway" else None
+            lines.append({"net": net_name, "route": str(rid), "label": label,
+                          "color": (f"#{hexc}" if hexc
+                                    else info.get("color", NET_COLOR[net_name])),
+                          "coords": coords})
     print(f"  {len(lines)} route lines")
 
     # ---- stations within 60 min ----
     st = pd.read_csv(C.require(C.OUT_STATION_TIMES, "run scripts/build_graph.py first"))
     st = st[st["min"] <= 60]
-    stations = [{"name": str(r["name"]).strip(), "net": r.net,
-                 "lat": round(float(r.lat), 5), "lon": round(float(r.lon), 5),
-                 "min": round(float(r["min"]), 1)}
-                for _, r in st.iterrows() if r["name"] and str(r["name"]) != "nan"]
+
+    # ---- line membership and station symbols ----
+    # station_times.csv is keyed by GTFS stop_id, and for the subway that means
+    # northbound and southbound *platforms* (127N, 127S) rather than the station
+    # (127) — so the same stop arrived twice, at the same coordinates. Roll
+    # platforms up to their parent station, keep the best platform time, and ask
+    # stop_times which routes actually call there.
+    line_at, parent = {}, {}
+    try:
+        sd = FEEDS["subway"]
+        stops = pd.read_csv(f"{sd}/stops.txt", dtype=str).fillna("")
+        stx = pd.read_csv(f"{sd}/stop_times.txt", dtype=str, usecols=["trip_id", "stop_id"])
+        trp = pd.read_csv(f"{sd}/trips.txt", dtype=str, usecols=["trip_id", "route_id"])
+        parent = dict(zip(stops.stop_id, stops.parent_station.replace("", np.nan)))
+        stx["route_id"] = stx.trip_id.map(dict(zip(trp.trip_id, trp.route_id)))
+        stx["station"] = [parent.get(s) if isinstance(parent.get(s), str) else s
+                          for s in stx.stop_id]
+        for sid, grp in stx.groupby("station"):
+            line_at[sid] = sorted({str(r) for r in grp.route_id.dropna()})
+        st = st.copy()
+        st["station_id"] = [
+            (parent.get(s) if isinstance(parent.get(s), str) else s) if n == "subway" else None
+            for s, n in zip(st.stop_id.astype(str), st.net)
+        ]
+    except Exception as exc:
+        print(f"  station line lookup unavailable: {exc}")
+
+    def _color_for(rid):
+        short = route_info.get(("subway", rid), {}).get("short") or rid
+        hexc = SUBWAY_MAP.get(short) or route_info.get(("subway", rid), {}).get("color")
+        return (f"#{hexc}" if hexc else NET_COLOR["subway"]), short
+
+    def _symbol(row):
+        if row["net"] != "subway":
+            return [NET_COLOR[row["net"]]], NET_LABEL[row["net"]], False
+        rids = line_at.get(row["station_id"], []) if row.get("station_id") else []
+        cols, shorts = [], []
+        for rid in rids:
+            c, s = _color_for(rid)
+            cols.append(c); shorts.append(s)
+        if not cols:
+            return [NET_COLOR["subway"]], "", False
+        uniq = list(dict.fromkeys(cols))
+        return uniq, " · ".join(shorts), len(uniq) > 1
+
+    stations = []
+    seen = set()
+    for _, r in st.sort_values("min").iterrows():  # best time first: keeps it on collapse
+        if not r["name"] or str(r["name"]) == "nan":
+            continue
+        key = (r["net"], r.get("station_id") or f'{r["name"]}@{round(float(r.lat),4)},{round(float(r.lon),4)}')
+        if key in seen:
+            continue
+        seen.add(key)
+        cols, routes_txt, xfer = _symbol(r)
+        stations.append({"name": str(r["name"]).strip(), "net": r.net,
+                         "lat": round(float(r.lat), 5), "lon": round(float(r.lon), 5),
+                         "min": round(float(r["min"]), 1),
+                         "colors": cols, "routes": routes_txt, "xfer": bool(xfer)})
+    # The feed splits a station complex into separate stations — Times Sq is
+    # four of them (1/2/3, 7, S, N/Q/R/W), Fulton St five — but the MTA map
+    # draws one interchange dot per complex. Cluster subway symbols within
+    # 200 m and merge their line sets; anything further apart stays separate.
+    ORDER = ["1", "2", "3", "4", "5", "6", "6X", "7", "7X", "A", "C", "E",
+             "B", "D", "F", "FX", "M", "G", "J", "Z", "L", "N", "Q", "R", "W",
+             "S", "SIR"]
+    sub = [i for i, s in enumerate(stations) if s["net"] == "subway"]
+    if sub:
+        pts = gpd.GeoSeries(
+            shapely.points([stations[i]["lon"] for i in sub],
+                           [stations[i]["lat"] for i in sub]), crs=4326).to_crs(32618)
+        pairs = shapely.STRtree(pts.values).query(pts.values, predicate="dwithin",
+                                                  distance=200)
+        boss = {i: i for i in sub}
+
+        def find(i):
+            while boss[i] != i:
+                boss[i] = boss[boss[i]]
+                i = boss[i]
+            return i
+
+        # Two platforms 150 m apart are not necessarily one complex: 14 St on
+        # the 1/2/3, the A/C/E, the F/M and the L are four separate stations.
+        # The MTA map merges a complex only where the stations carry the same
+        # name (or a name the other extends), so gate the merge on that too.
+        def same_complex(a, b):
+            na, nb = stations[sub[a]]["name"].lower(), stations[sub[b]]["name"].lower()
+            return na == nb or na.startswith(nb) or nb.startswith(na)
+
+        for a, b in zip(pairs[0], pairs[1]):
+            if not same_complex(a, b):
+                continue
+            ra, rb = find(sub[a]), find(sub[b])
+            if ra != rb:
+                boss[rb] = ra
+        groups = {}
+        for i in sub:
+            groups.setdefault(find(i), []).append(i)
+
+        merged, dropped = [], set()
+        for root, members in groups.items():
+            keep = stations[root]
+            dropped.update(i for i in members if i != root)
+            cols, rts = list(keep["colors"]), keep["routes"].split(" · ") if keep["routes"] else []
+            best = keep["min"]
+            for i in members:
+                if i == root:
+                    continue
+                s2 = stations[i]
+                best = min(best, s2["min"])
+                cols += [c for c in s2["colors"] if c not in cols]
+                if s2["routes"]:
+                    rts += [x for x in s2["routes"].split(" · ") if x not in rts]
+            def rank(x):
+                return ORDER.index(x) if x in ORDER else 99
+            rts = sorted(rts, key=rank)
+            keep.update(colors=cols, routes=" · ".join(rts),
+                        xfer=len(cols) > 1, min=best)
+        stations = [s for i, s in enumerate(stations) if i not in dropped]
+
+    print(f"  {len(stations)} station symbols "
+          f"({sum(1 for s in stations if s['xfer'])} interchanges)")
 
     meta = {"zori_month": "2026-09-30", "acs_vintage": "2017-2021..2020-2024 (5yr 2024)",
             "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE,
@@ -224,7 +377,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       <div class="lg"><span class="sw" style="background:#22c55e"></span>Tract median in budget (reliable)</div>
       <div class="lg"><span class="sw" style="background:#f59e0b"></span>Above ceiling / unreliable estimate</div>
       <div class="lg"><span class="sw" style="background:#ef4444"></span>Over budget</div>
-      <div class="lg" style="margin-top:6px">— <span style="color:#1f6feb">Subway</span> · <span style="color:#c1121f">Metro-North</span> · <span style="color:#b5179e">LIRR</span> · <span style="color:#0f766e">PATH</span></div>
+      <div class="lg" style="margin-top:6px">— <span style="color:#eee">Subway</span> in MTA line colours · <span style="color:#c1121f">Metro-North</span> · <span style="color:#b5179e">LIRR</span> · <span style="color:#0f766e">PATH</span></div>
+      <div class="lg">Stops: line-coloured dot · <span class="sw" style="background:#fff;border:1.5px solid #111318"></span> interchange</div>
     </div>
   </div>
 </div>
@@ -256,7 +410,9 @@ const lineFC={type:'FeatureCollection',features:D.lines
             geometry:{type:'LineString',coordinates:l.coords.map(c=>[c[1],c[0]])}}))};
 
 const stnFC={type:'FeatureCollection',features:D.stations.map(s=>({
-  type:'Feature',properties:{name:s.name,min:s.min,color:NETC[s.net]||'#888'},
+  type:'Feature',
+  properties:{name:s.name,min:s.min,net:s.net,routes:s.routes||'',
+              xfer:!!s.xfer, color:(s.colors&&s.colors[0])||NETC[s.net]||'#888'},
   geometry:{type:'Point',coordinates:[s.lon,s.lat]}}))};
 
 const NONE='#000000';
@@ -341,13 +497,24 @@ map.on('load',()=>{
     paint:{'line-color':'#0b0e13','line-width':0.75}});
 
   map.addSource('lines',{type:'geojson',data:lineFC});
+  // Dark casing under every route so parallel lines stay separable against the
+  // choropleth — the same trick the MTA map gets from its white background.
+  map.addLayer({id:'lines-casing',type:'line',source:'lines',
+    paint:{'line-color':'#0b0e13','line-width':['case',['==',['get','net'],'subway'],6.4,3.4],
+           'line-opacity':0.92}});
   map.addLayer({id:'lines',type:'line',source:'lines',
-    paint:{'line-color':['get','color'],'line-width':2,'line-opacity':0.75}});
+    paint:{'line-color':['get','color'],
+           'line-width':['case',['==',['get','net'],'subway'],3.4,2],
+           'line-opacity':['case',['==',['get','net'],'subway'],0.95,0.7]}});
 
   map.addSource('stations',{type:'geojson',data:stnFC});
+  // Station symbol follows the MTA convention: a dot in the serving line's
+  // colour, and a white dot with a dark ring where lines meet.
   map.addLayer({id:'stations',type:'circle',source:'stations',
-    paint:{'circle-radius':2.6,'circle-color':['get','color'],
-           'circle-stroke-width':0.6,'circle-stroke-color':'#0b0e13'}});
+    paint:{'circle-radius':['case',['==',['get','xfer'],true],4.6,3.1],
+           'circle-color':['case',['==',['get','xfer'],true],'#ffffff',['get','color']],
+           'circle-stroke-width':['case',['==',['get','xfer'],true],1.6,0.9],
+           'circle-stroke-color':['case',['==',['get','xfer'],true],'#111318','#0b0e13']}});
 
   map.on('click','tracts-fill',e=>{
     const p=e.features[0].properties;
@@ -358,7 +525,8 @@ map.on('load',()=>{
   map.on('click','stations',e=>{
     const p=e.features[0].properties;
     new maplibregl.Popup({offset:8,maxWidth:'240px'}).setLngLat(e.lngLat)
-      .setHTML(`<b>${p.name}</b><br><span style="color:#888">${p.min} min to Penn 1</span>`).addTo(map);
+      .setHTML(`<b>${p.name}</b>`+(p.routes?`<br><span style="color:#aaa;font-size:11px">${p.routes}</span>`:'')
+               +`<br><span style="color:#888">${p.min} min to Penn 1</span>`).addTo(map);
   });
   ['tracts-fill','stations'].forEach(id=>{
     map.on('mouseenter',id,()=>{map.getCanvas().style.cursor='pointer';});
@@ -419,7 +587,9 @@ function draw(){
 document.getElementById('mode').onchange=draw;
 document.getElementById('onlyBudget').onchange=draw;
 document.getElementById('showLines').onchange=e=>{
-  if(ready) map.setLayoutProperty('lines','visibility',e.target.checked?'visible':'none');
+  if(!ready) return;
+  ['lines-casing','lines'].forEach(id=>
+    map.setLayoutProperty(id,'visibility',e.target.checked?'visible':'none'));
 };
 document.getElementById('showStations').onchange=e=>{
   if(ready) map.setLayoutProperty('stations','visibility',e.target.checked?'visible':'none');

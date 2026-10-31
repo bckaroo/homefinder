@@ -294,3 +294,31 @@ for most of that.
 
 Verified at zoom 13.6 over Hell's Kitchen: boundaries abut with a single clean
 line, shoreline follows the basemap water, no fill on the Hudson.
+
+## Subway drawn in MTA line colours, stations as MTA symbols
+
+Lines and stops previously shared one colour per network (one blue for all
+subway), which made the map unreadable as a subway map.
+
+- lines: colour per route from the MTA printed-map palette keyed on the route
+  bullet (`EE352E` 1/2/3, `00933C` 4/5/6, `B933AD` 7, `0039A6` A/C/E, `FF6319`
+  B/D/F/M, `6CBE45` G, `996633` J/Z, `A7A9AC` L, `FCCC0A` N/Q/R/W, `808183` S;
+  SIR falls back to the feed's own `08179C`). The feed ships its own
+  screen-tuned palette — the printed-map values are the recognisable ones.
+- a dark casing runs under every route: against a coloured choropleth the
+  orange and green lines otherwise vanish into orange and green tracts
+- stations: dot in the serving line's colour; white dot with a dark ring where
+  line groups meet, which is the MTA convention for an interchange
+
+Two data traps worth remembering:
+
+1. `station_times.csv` is keyed by GTFS **stop_id**, and for the subway that is
+   a platform (`127N`, `127S`), not the station (`127`). The same stop therefore
+   appeared twice at identical coordinates. Platforms are now rolled up to their
+   parent station, keeping the best platform time.
+2. The feed splits a complex into separate stations — Times Sq is four (1/2/3,
+   7, S, N/Q/R/W). Merging by proximity alone is wrong: 14 St exists four times
+   as genuinely distinct stations. The merge is gated on proximity (200 m) *and*
+   a matching/extending station name.
+
+441 symbols, 135 interchanges, at 60 min from Penn.
