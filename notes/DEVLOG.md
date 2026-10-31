@@ -259,3 +259,30 @@ No geometry clipping was needed. An A/B render (tracts drawn under the basemap
 the shoreline: the bays were only shaded because of those two water tracts, and
 putting the choropleth under the style's opaque landuse layers cost most of its
 legibility. Reverted; geometry unchanged.
+
+## Tracts redrawn from full-resolution TIGER, coast-clipped, coverage-simplified
+
+The complaint was that tract shapes looked janky at street zoom. Three causes
+stacked: the source was `cb_*_500k` (generalised to 1:500,000), it was then
+simplified at 0.0012 deg (~130 m), and each polygon was simplified
+independently so shared edges diverged into different chords — hairline gaps
+plus staircases along every boundary.
+
+`scripts/geo_prep.py` now owns map geometry: TIGER/Line 2024 tracts
+(1:100,000), water cut out with AREAWATER, simplified as a coverage at 15 m.
+Coverage simplification is the load-bearing change — one simplification per
+shared edge, so neighbours still abut exactly.
+
+Water: TIGER tracts are not coast-clipped, so the cut is ours to do. Restricted
+to MTFCC H2030/H2040/H2051/H2053/H2081 (lake, reservoir, bay/estuary, ocean,
+glacier) and buffered 25 m outward. H3010 stream polygons are excluded on
+purpose — subtracting drainage linework shreds every block it touches.
+Per-county AREAWATER is fetched lazily; 14 counties, 2.8 MB of zips, no manual
+step.
+
+Cost of the detail: tracts.geojson 1.9 MB -> 3.1 MB, page 2.2 MB -> 3.6 MB.
+Coordinates rounded to 5 dp (1.1 m) in `geo_prep.feature_collection`, which pays
+for most of that.
+
+Verified at zoom 13.6 over Hell's Kitchen: boundaries abut with a single clean
+line, shoreline follows the basemap water, no fill on the Hudson.

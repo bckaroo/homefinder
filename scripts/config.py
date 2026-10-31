@@ -35,6 +35,15 @@ GEOS_2023_5YR = RAW / "Geos20235YR.txt"
 ZORI_ZIP = RAW / "Zip_zori_uc_sfrcondomfr_sm_month.csv"
 CB_TRACT_NY = RAW / "cb_2023_36_tract_500k.zip"
 CB_TRACT_NJ = RAW / "cb_2023_34_tract_500k.zip"
+# Full-resolution TIGER/Line tracts for the map itself. The cartographic (CB)
+# files are generalised to 1:500k and look like janky quadrilaterals at street
+# zoom; CB stays in use for centroid maths because it is coast-clipped.
+TIGER_TRACT_NY = RAW / "tl_2024_36_tract.zip"
+TIGER_TRACT_NJ = RAW / "tl_2024_34_tract.zip"
+AREAWATER_DIR = RAW / "areawater"   # per-county TIGER AREAWATER, fetched on demand
+SIMPLIFY_M = 15                    # metres; street-scale simplification for the web map
+WATER_BUFFER_M = 25                # cut water outward so no hairline of colour sits on it
+MIN_PART_M2 = 5000                 # drop speck islands from clipped tracts
 
 # --- derived outputs (committed) ---
 OUT_STATION_TIMES = DATA / "station_times.csv"

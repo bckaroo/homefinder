@@ -40,16 +40,39 @@ ACS medians with a `>= $3,501` topcode censoring 19.7% of Manhattan tracts.
 Bike/walk times are free-flow street-network estimates with no weather, traffic
 or e-bike assumptions, and only exist inside the 30 km routing radius.
 
-Census tracts that are essentially water — harbour, bay and sound tracts with
-`AWATER / (ALAND + AWATER) >= 0.90` — are removed from the map selection
-(`config.WATER_SHARE_MAX`). ACS still tabulates a rent median for them and the
-router still returns a commute from their centroid, so left in they shade open
-water and offer a "neighbourhood" nobody can live in. Two tracts in the current
-extent qualify (Eastchester Bay 36005001904, Jamaica Bay 36081099705). Tracts
-that merely *contain* a lot of water — Bay Ridge, Sunset Park, Broad Channel —
-are real neighbourhoods and stay. The tract geometry itself is not clipped:
-the cartographic boundary tracts already follow the shoreline, so no river or
-bay is shaded once the water tracts are gone.
+**Why the tracts used to look janky.** Three separate causes, all fixed:
+
+1. Geometry came from the *cartographic* boundary file, `cb_2023_*_tract_500k`,
+   which is generalised to 1:500,000 — roughly one vertex per 100 m of
+   shoreline, straight chords across a street grid.
+2. It was then simplified at `0.0012°` (~130 m). On top of a 1:500k source that
+   turned every block into a long diagonal cut.
+3. Each polygon was simplified on its own. Neighbours share an edge, so both
+   sides got a *different* chord and every boundary opened a hairline gap and a
+   staircase — the "mortar lines" look at street zoom.
+
+The map now reads full-resolution TIGER/Line 2024 tracts (1:100,000,
+street-following) and simplifies them **as a coverage**
+(`shapely.coverage_simplify`, 15 m): each shared edge is simplified once, so
+adjacent tracts keep identical edges and no gaps open. See `scripts/geo_prep.py`.
+
+**Water.** TIGER tracts are *not* coast-clipped (unlike the CB files), so a
+shoreline tract's polygon runs out over the harbour. `geo_prep` subtracts
+TIGER AREAWATER — ocean, bay, lake and reservoir polygons only, buffered 25 m
+outward so no hairline of colour is left sitting on the basemap's water.
+Drainage-line polygons (MTFCC H3010, streams) are deliberately excluded: they
+are linework, and subtracting them shaves a ragged channel through every block
+they graze. Per-county AREAWATER zips are fetched on demand into
+`data/raw/areawater/` (14 counties, 2.8 MB).
+
+**Water-body tracts.** Tracts that are essentially water — `AWATER / (ALAND +
+AWATER) >= 0.90` (`config.WATER_SHARE_MAX`) — are removed from the selection
+entirely. ACS still tabulates a rent median for a harbour tract and the router
+still returns a commute from its centroid, so left in they shade open water and
+offer a "neighbourhood" nobody can live in. Two tracts in the current extent
+qualify (Eastchester Bay 36005001904, Jamaica Bay 36081099705). Tracts that
+merely *contain* a lot of water — Bay Ridge, Sunset Park, Broad Channel — are
+real neighbourhoods and stay.
 
 ## Layout
 

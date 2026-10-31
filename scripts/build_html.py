@@ -9,6 +9,7 @@ from shapely.geometry import mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config as C
+import geo_prep
 
 OUT = str(C.DATA)
 TOPCAP = C.TOPCAP
@@ -46,39 +47,11 @@ def main():
 
     # ---- geometry for the map ----
     print("loading geometry...")
-    g = gpd.read_file(C.require(C.CB_TRACT_NY, "run scripts/fetch_data.py"))
-    nj = gpd.read_file(C.require(C.CB_TRACT_NJ, "run scripts/fetch_data.py"))
-    cols = ["GEOID", "ALAND", "AWATER", "geometry"]
-    geo = pd.concat([g[cols], nj[cols]], ignore_index=True)
-    geo = gpd.GeoDataFrame(geo, geometry="geometry", crs=4326)
-    geo["GEOID"] = geo.GEOID.astype(str)
-
-    # Census tracts that are essentially water (harbour, bay, sound) carry no
-    # housing, yet ACS still tabulates a rent median for them and the routing
-    # stage still returns a commute from their centroid. Shading one puts a
-    # neighbourhood on open water, so they are removed from the selection.
-    # Tracts that merely *contain* a lot of water (Bay Ridge, Sunset Park,
-    # Broad Channel) stay: those are real neighbourhoods with a shoreline.
-    tot = geo.ALAND + geo.AWATER
-    geo["water_share"] = (geo.AWATER / tot.replace(0, np.nan)).fillna(0.0)
-    water_body = geo.water_share >= C.WATER_SHARE_MAX
-    dropped = set(geo.GEOID[water_body])
-    geo = geo[~water_body]
-
-    # Keep every tract with at least one way of reaching Penn 1; walk/cycle
-    # alone is a valid answer for tracts the transit graph cannot serve.
     keep = df[df[["commute_min", "walk_mode_min", "cycle_mode_min"]].notna().any(axis=1)].copy()
-    m = geo.merge(keep, left_on="GEOID", right_on="geoid", how="inner")
-    n_water = len(dropped & set(keep.geoid))
-    print(f"  map features: {len(m)} (water-body tracts removed: {n_water}, "
-          f">= {C.WATER_SHARE_MAX:.0%} water)")
+    m, n_water = geo_prep.build(keep, log=print)
 
-    # simplify hard to keep the file small
-    m["geometry"] = m.geometry.simplify(0.0012, preserve_topology=True)
-
-    feats = []
-    for _, r in m.iterrows():
-        props = {
+    def _props(r):
+        return {
             "geoid": r.geoid,
             "station": r.station,
             "net": r.station_net,
@@ -100,9 +73,8 @@ def main():
             "trust": bool(r.trustworthy),
             "budget": bool(r.in_budget),
         }
-        feats.append({"type": "Feature", "properties": props, "geometry": mapping(r.geometry)})
 
-    gj = {"type": "FeatureCollection", "features": feats}
+    gj = geo_prep.feature_collection(m, _props)
     gp = str(C.OUT_TRACT_GEOJSON)
     json.dump(gj, open(gp, "w"), separators=(",", ":"))
     print(f"  wrote {gp}  ({os.path.getsize(gp)/1e6:.1f} MB)")
@@ -366,7 +338,7 @@ map.on('load',()=>{
            'fill-opacity':['case',['==',['get','fill'],NONE],0,0.55]}});
   map.addLayer({id:'tracts-line',type:'line',source:'tracts',
     filter:['!=',['get','fill'],NONE],
-    paint:{'line-color':'#0b0e13','line-width':0.4}});
+    paint:{'line-color':'#0b0e13','line-width':0.75}});
 
   map.addSource('lines',{type:'geojson',data:lineFC});
   map.addLayer({id:'lines',type:'line',source:'lines',

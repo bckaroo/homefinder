@@ -38,6 +38,10 @@ DIRECT = {
         "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_36_tract_500k.zip",
     C.CB_TRACT_NJ:
         "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_34_tract_500k.zip",
+    C.TIGER_TRACT_NY:
+        "https://www2.census.gov/geo/tiger/TIGER2024/TRACT/tl_2024_36_tract.zip",
+    C.TIGER_TRACT_NJ:
+        "https://www2.census.gov/geo/tiger/TIGER2024/TRACT/tl_2024_34_tract.zip",
 }
 
 
