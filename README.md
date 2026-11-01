@@ -2,6 +2,8 @@
 
 PROJ-041 · DevOS-tracked. Repository folder stays `transit-housing-analysis-map`; the GitHub remote is `bckaroo/homefinder`.
 
+**Live:** https://bckaroo.github.io/homefinder/ — published by `.github/workflows/pages.yml`, which uploads the committed `web/` directory as the Pages artifact. Pages only accepts `/` or `/docs` as a branch source, so `web/` is deployed via Actions rather than moved. Rebuild locally with `scripts/build_html.py`, commit `web/`, push `main`, and the site redeploys.
+
 Housing affordability crossed with commute reachability: what does living in a
 place actually cost you in rent and in time, by mode.
 
