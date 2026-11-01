@@ -738,8 +738,8 @@ map.on('load',()=>{
                           13,['case',['==',['get','class'],'city'],17,12],
                           15,['case',['==',['get','class'],'city'],17,14]],
             'text-padding':8,'text-max-width':8,'symbol-sort-key':['coalesce',['get','rank'],99]},
-    paint:{'text-color':'#3e4f46','text-halo-color':'rgba(246,245,234,0.92)',
-           'text-halo-width':1.4}});
+    paint:{'text-color':'#24332b','text-halo-color':'rgba(250,248,238,0.98)',
+           'text-halo-width':1.5}});
 
   // Boroughs sit above towns: one word to orient the whole view, set wider and
   // heavier than the municipal names so the two tiers never read as equals.
@@ -760,13 +760,15 @@ map.on('load',()=>{
   // already carries the meaning.
   map.addSource('hoods',{type:'geojson',data:D.hoods});
   map.addLayer({id:'places-hood',type:'symbol',source:'hoods',minzoom:11.2,
-    layout:{'text-field':['get','name'],'text-font':['Noto Sans Regular'],
-            'text-transform':'uppercase','text-letter-spacing':0.13,
-            'text-size':['interpolate',['linear'],['zoom'],11.2,9,14,10.5,17,12],
+    // Bold, not Regular: at 10-11px the hairline strokes of Noto Sans read as
+    // grey no matter how dark the ink, especially over extruded buildings.
+    layout:{'text-field':['get','name'],'text-font':['Noto Sans Bold'],
+            'text-transform':'uppercase','text-letter-spacing':0.12,
+            'text-size':['interpolate',['linear'],['zoom'],11.2,10,14,11.5,17,13.5],
             'text-padding':9,'text-max-width':9,
             'symbol-sort-key':['length',['get','name']]},
-    paint:{'text-color':'#61705f','text-halo-color':'rgba(246,245,234,0.92)',
-           'text-halo-width':1.4}});
+    paint:{'text-color':'#1b2a22','text-halo-color':'rgba(250,248,238,0.98)',
+           'text-halo-width':1.7}});
 
     map.addSource('stations',{type:'geojson',data:stnFC});
   // Station dots are noise at city scale: below z11 the network line pattern
