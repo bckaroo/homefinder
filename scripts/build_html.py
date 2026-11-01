@@ -3,7 +3,7 @@
 Phase 4: build the deliverable — self-contained Leaflet HTML with embedded GeoJSON.
 Adds reliability gates so the shortlist only shows tracts the data can actually support.
 """
-import pandas as pd, numpy as np, geopandas as gpd, json, os, sys, shapely
+import pandas as pd, numpy as np, geopandas as gpd, json, os, re, sys, shapely
 from pathlib import Path
 from shapely.geometry import mapping
 
@@ -323,7 +323,8 @@ def main():
             "water_share_max": C.WATER_SHARE_MAX, "water_tracts_removed": n_water,
             "ask": ask_ctx, "stock": stock_ctx}
 
-    html = render(gj, lines, stations, meta)
+    hoods = hood_labels()
+    html = render(gj, lines, stations, meta, hoods)
     C.ensure_dirs()
     open(C.OUT_MAP_HTML, "w").write(html)
     print(f"  wrote {C.OUT_MAP_HTML} ({len(html)/1e6:.1f} MB)")
@@ -337,8 +338,50 @@ def main():
     print(short[["station", "commute_min", "rent_studio", "rent_1br"]].head(20).to_string(index=False))
 
 
-def render(gj, lines, stations, meta):
-    data = json.dumps({"tracts": gj, "lines": lines, "stations": stations, "meta": meta},
+def _short_nta(name):
+    """Compound NTAs stack four or five names into one label ("The Battery-
+    Governors Island-Ellis Island-Liberty Island"). Trim to the part a person
+    would actually say; two-part names such as Bedford-Stuyvesant stay whole."""
+    seg = name.split("-")
+    if len(seg) >= 4:
+        return seg[0]
+    if len(seg) == 3:
+        return "-".join(seg[:2])
+    return name
+
+
+def hood_labels():
+    """One anchor per NYC neighbourhood, taken from the 2020 NTA polygons.
+
+    The basemap's place layer carries boroughs but has no neighbourhood tier, and
+    its town/village tags put a few neighbourhood names (Journal Square, The
+    Ironbound) in the wrong class. NTAs are the city's own geography and already
+    underpin the area rent table, so the labels and the numbers agree.
+    """
+    path = C.RAW / "geo" / "nyc_nta2020.geojson"
+    if not path.exists():
+        print("  hood labels skipped: NTA file missing")
+        return {"type": "FeatureCollection", "features": []}
+    src = json.loads(path.read_text())
+    skip = re.compile(r"cemeter|airport", re.I)   # land uses, not names people say
+    feats = []
+    for f in src["features"]:
+        pr = f["properties"]
+        if skip.search(pr.get("ntaname") or ""):
+            continue
+        pt = shapely.geometry.shape(f["geometry"]).representative_point()
+        label = _short_nta(pr.get("ntaname") or "")
+        feats.append({"type": "Feature",
+                      "properties": {"name": label, "boro": pr.get("boroname")},
+                      "geometry": {"type": "Point",
+                                   "coordinates": [round(pt.x, 5), round(pt.y, 5)]}})
+    print(f"  hood labels: {len(feats)} neighbourhood anchors")
+    return {"type": "FeatureCollection", "features": feats}
+
+
+def render(gj, lines, stations, meta, hoods):
+    data = json.dumps({"tracts": gj, "lines": lines, "stations": stations,
+                       "hoods": hoods, "meta": meta},
                       separators=(",", ":"))
     a = meta.get("ask") or {}
     if a.get("prem_med"):
@@ -1111,26 +1154,45 @@ map.on('load',()=>{
             ['match',['get','class'],['city','town','village'],true,false]],
     layout:{'text-field':placeName,'text-font':['Noto Sans Regular'],
             'text-transform':'uppercase','text-letter-spacing':0.14,
-            'text-size':['interpolate',['linear'],['zoom'],7.5,9,10,10.5,12,12.5,15,15],
-            'text-padding':6,'text-max-width':8,'symbol-sort-key':['coalesce',['get','rank'],99]},
+            // One interpolate, class applied at the stops: MapLibre rejects a
+            // case whose branches both hold zoom subexpressions.
+            'text-size':['interpolate',['linear'],['zoom'],
+                          7.5,['case',['==',['get','class'],'city'],11,8.5],
+                          10,['case',['==',['get','class'],'city'],13,10],
+                          13,['case',['==',['get','class'],'city'],17,12],
+                          15,['case',['==',['get','class'],'city'],17,14]],
+            'text-padding':8,'text-max-width':8,'symbol-sort-key':['coalesce',['get','rank'],99]},
     paint:{'text-color':'#3e4f46','text-halo-color':'rgba(246,245,234,0.92)',
            'text-halo-width':1.4}});
 
-  // Neighbourhoods only earn their place once tracts are individually readable;
-  // below that they are clutter over a choropleth that already carries meaning.
-  map.addLayer({id:'places-hood',type:'symbol',source:'openmaptiles','source-layer':'place',
-    minzoom:10.5,
+  // Boroughs sit above towns: one word to orient the whole view, set wider and
+  // heavier than the municipal names so the two tiers never read as equals.
+  map.addLayer({id:'places-borough',type:'symbol',source:'openmaptiles','source-layer':'place',
+    minzoom:9,
     filter:['all',['match',['geometry-type'],['Point'],true,false],
-            ['match',['get','class'],['suburb','quarter','neighbourhood'],true,false]],
-    layout:{'text-field':placeName,'text-font':['Noto Sans Regular'],
-            'text-transform':'uppercase','text-letter-spacing':0.16,
-            'text-size':['interpolate',['linear'],['zoom'],10.5,9,13,10.5,16,12],
-            'text-padding':5,'text-max-width':9,
-            'symbol-sort-key':['case',['==',['get','class'],'neighbourhood'],2,1]},
-    paint:{'text-color':'#6b7a70','text-halo-color':'rgba(246,245,234,0.9)',
-           'text-halo-width':1.2}});
+            ['==',['get','class'],'suburb']],
+    layout:{'text-field':placeName,'text-font':['Noto Sans Bold'],
+            'text-transform':'uppercase','text-letter-spacing':0.22,
+            'text-size':['interpolate',['linear'],['zoom'],9,11,12,13.5,16,16],
+            'text-padding':8,'text-max-width':10},
+    paint:{'text-color':'#44564b','text-halo-color':'rgba(246,245,234,0.95)',
+           'text-halo-width':1.8,'text-opacity':0.85}});
 
-  map.addSource('stations',{type:'geojson',data:stnFC});
+  // Neighbourhoods come from the city's own NTAs rather than the basemap, which
+  // has no neighbourhood tier at all. They only earn their place once tracts are
+  // individually readable; below that they are clutter over a choropleth that
+  // already carries the meaning.
+  map.addSource('hoods',{type:'geojson',data:D.hoods});
+  map.addLayer({id:'places-hood',type:'symbol',source:'hoods',minzoom:11.2,
+    layout:{'text-field':['get','name'],'text-font':['Noto Sans Regular'],
+            'text-transform':'uppercase','text-letter-spacing':0.13,
+            'text-size':['interpolate',['linear'],['zoom'],11.2,9,14,10.5,17,12],
+            'text-padding':9,'text-max-width':9,
+            'symbol-sort-key':['length',['get','name']]},
+    paint:{'text-color':'#61705f','text-halo-color':'rgba(246,245,234,0.92)',
+           'text-halo-width':1.4}});
+
+    map.addSource('stations',{type:'geojson',data:stnFC});
   // Station dots are noise at city scale: below z11 the network line pattern
   // already reads, and 441 named circles collapse into a rash of white rings.
   map.addLayer({id:'stations',type:'circle',source:'stations',minzoom:11,
@@ -1141,6 +1203,11 @@ map.on('load',()=>{
            'circle-color':['case',['==',['get','xfer'],true],'#ffffff',['get','color']],
            'circle-stroke-width':['case',['==',['get','xfer'],true],1.4,0.9],
            'circle-stroke-color':['case',['==',['get','xfer'],true],'#254c47','#ffffff']}});
+
+  // Text last: route lines and station rings are added above everything else, and
+  // without this they slice straight through the place names.
+  ['places-town','places-borough','places-hood']
+    .forEach(id=>{if(map.getLayer(id))map.moveLayer(id)});
 
   map.on('click','tracts-fill',e=>{
     const p=e.features[0].properties;
