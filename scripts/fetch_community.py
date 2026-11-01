@@ -500,7 +500,12 @@ def main():
         tot = sum(v[w] for v in d.values() if v[w])
         return sum(v[key] * v[w] for v in d.values() if v[w]) / tot if tot else 0
 
+    # The region file carries every tract we measured, NYC included. Weighting it
+    # whole as "suburban" overstates suburban access badly (67.5% vs 39.6% for shop
+    # clusters), so the NYC tracts have to come out before any suburban average.
     sub = {g: v for g, v in reg.items() if g[:5] not in NYC}
+    assert sub and not any(g[:5] in NYC for g in sub), \
+        "suburban set must exclude New York City tracts"
 
     log("")
     log("                                  within 400 m    within 800 m")
