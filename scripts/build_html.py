@@ -30,9 +30,29 @@ def main():
     _pa = json.load(open(_pa_path)) if os.path.exists(_pa_path) else {}
     if not _pa:
         print("  ! no park_access.json — run scripts/fetch_park_access.py")
-    df["pk400"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("p400"))
-    df["pk800"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("p800"))
-    df["pklots"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("lots"))
+    # Outside the five boroughs there is no PLUTO lot file, so the denominator
+    # is 2020 census block-group population instead (scripts/fetch_park_access_region.py).
+    # Inside the city the lot measure wins: a tax lot is what you actually walk
+    # from, a block-group centre is a stand-in for it.
+    _pr_path = os.path.join(OUT, "park_access_region.json")
+    _preg = json.load(open(_pr_path)) if os.path.exists(_pr_path) else {}
+    if not _preg:
+        print("  ! no park_access_region.json — run scripts/fetch_park_access_region.py")
+
+    def _pk(g):
+        v = _pa.get(g)
+        if v:
+            return v.get("p400"), v.get("p800"), v.get("lots"), "lot"
+        v = _preg.get(g)
+        if v:
+            return v.get("p400"), v.get("p800"), v.get("pop"), "pop"
+        return None, None, None, None
+
+    _pks = df.geoid.map(_pk)
+    df["pk400"] = [p[0] for p in _pks]
+    df["pk800"] = [p[1] for p in _pks]
+    df["pkden"] = [p[2] for p in _pks]
+    df["pkmethod"] = [p[3] for p in _pks]
 
     # ---- reliability gates ----
     df["rel_moe_1br"] = df.rent_1br_moe / df.rent_1br
@@ -114,7 +134,10 @@ def main():
             # the percentage so a 12-lot tract cannot read as a neighbourhood.
             "pk400": None if pd.isna(r.get("pk400")) else float(r.pk400),
             "pk800": None if pd.isna(r.get("pk800")) else float(r.pk800),
-            "pklots": None if pd.isna(r.get("pklots")) else int(r.pklots),
+            # denominator behind the percentage: tax lots inside NYC, 2020
+            # block-group population outside it — and which one it is
+            "pkden": None if pd.isna(r.get("pkden")) else int(r.pkden),
+            "pkm": None if pd.isna(r.get("pkmethod")) else str(r.pkmethod),
         }
 
     gj = geo_prep.feature_collection(m, _props)
@@ -744,15 +767,17 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
 
       <div class="keys" id="keysPark" hidden>
-        <div class="lbl" style="margin-bottom:8px">Tax lots within a 10-minute walk of a major park</div>
+        <div class="lbl" style="margin-bottom:8px">Residents (or tax lots in NYC) within a 10-minute walk of a major park</div>
         <div class="ramp" style="background:linear-gradient(90deg,#e2e9ea,#cbd8e0,#a8bed2,#7d9dba,#4f7498)"></div>
         <div class="rampend"><span>0%</span><span>100%</span></div>
-        <div class="krow"><span class="sw" style="background:var(--flat)"></span>Outside New York City — no tax-lot data</div>
+        <div class="krow"><span class="sw" style="background:var(--flat)"></span>No residents, or no tax lots, to measure</div>
         <div style="margin-top:10px;font-size:11.5px;line-height:1.45;color:#6b857c">
           Major park = 100 acres or more, or a waterfront park of 20 acres or
-          more. Distance runs straight from the lot to the park boundary — a
-          screen, so it overstates access across a river, rail yard or
-          expressway.</div>
+          more. In the five boroughs the share is of PLUTO tax lots; outside
+          them it is of 2020 census block-group population, the finest
+          denominator that covers the whole region. Distance runs straight to
+          the park boundary — a screen, so it overstates access across a river,
+          rail yard or expressway.</div>
       </div>
     </div>
 
@@ -812,22 +837,28 @@ TEMPLATE = r"""<!DOCTYPE html>
           Shapes re-tracing a city park are dropped, so nothing is drawn twice.</p>
       </div>
       <div>
-        <h4>Park access by tax lot</h4>
-        <p>Every PLUTO 26v2 tax lot (858,284 records) is matched to the nearest
-          <i>major</i> park — 100 acres or more, or flagged waterfront — and the
-          straight-line distance from the lot's coordinate to that park's boundary
-          is measured in a local metric projection. Two thresholds are reported:
-          400 m, about a five-minute walk, and 800 m, about ten. Tract percentages
-          are shares of <i>lots</i>, not of land or of people, so a tract of large
-          industrial parcels and a tract of narrow rowhouses count the same way;
-          the lot count travels with the figure in the detail card — read a
-          100% on a twenty-lot tract accordingly. Only the five boroughs have
-          tax-lot coordinates, so tracts outside the city stay blank.
-          <b>This is a screen, not a network walk.</b> Straight-line distance
-          ignores the river, rail yard or expressway between a lot and a park, so
-          it overstates access on waterfront edges and along the big cuts; a
-          routed pedestrian walk would show lower figures there. The lot-level
-          table itself is in <i>data/parcels_park_access.csv</i>.</p>
+        <h4>Park access</h4>
+        <p>Two denominators, one question — how much of a place sits within a walk
+          of a park worth walking to. Inside the five boroughs, each PLUTO 26v2
+          tax lot (857,347 records) is matched to the nearest <i>major</i> park and
+          the straight-line distance from the lot's coordinate to the park's
+          boundary is measured in a local metric projection; the tract figure is
+          the share of <b>lots</b>. Outside the city there is no lot file, so the
+          share is of <b>2020 census block-group population</b>, measured from each
+          block group's centre — the finest denominator that covers the whole
+          region. On the same 2,281 city tracts the two methods agree to a median
+          of 0.0 points and a mean of 3.4 (r = 0.978), which is why the seam at the
+          city line can be read straight through. Two thresholds are reported:
+          400 m, about a five-minute walk, and 800 m, about ten. Because the lot
+          measure is a share of <i>lots</i>, a tract of large industrial parcels and
+          a tract of narrow rowhouses count the same way; the denominator travels
+          with the figure in the detail card — read a 100% on a twenty-lot tract
+          accordingly. <b>This is a screen, not a network walk.</b> Straight-line
+          distance ignores the river, rail yard or expressway between a lot and a
+          park, so it overstates access on waterfront edges and along the big cuts;
+          a routed pedestrian walk would show lower figures there. The lot-level
+          table is <i>data/parcels_park_access.csv</i>; the block-group pass is
+          <i>scripts/fetch_park_access_region.py</i>.</p>
       </div>
       <div>
         <h4>Bikeways</h4>
@@ -1113,8 +1144,9 @@ function detailHTML(p){
     <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
     <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
     ${stockBlock(p)}
-    ${p.pk800==null?'':`<div class="kv"><span>Lots near a major park</span><b>${p.pk800}% (10 min walk)</b></div>
-    <div class="kv"><span>…within 5 min walk</span><b>${p.pk400}%</b></div>`}
+    ${p.pk800==null?'':`<div class="kv"><span>${p.pkm==='pop'?'Residents':'Lots'} near a major park</span><b>${p.pk800}% (10 min walk)</b></div>
+    <div class="kv"><span>…within 5 min walk</span><b>${p.pk400}%</b></div>
+    ${p.pkden==null?'':`<div class="kv"><span>Denominator</span><b class="dim">${p.pkden.toLocaleString()} ${p.pkm==='pop'?'residents (block groups)':'tax lots'}</b></div>`}`}
     ${p.ask==null?
       `<div class="kv"><span>Asking, all units</span><b class="dim">no ZIP index</b></div>`:
       `<div class="kv"><span>Asking, all units</span><b>$${p.ask.toLocaleString()}</b></div>

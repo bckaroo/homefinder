@@ -377,3 +377,34 @@ Traps hit:
    mapped frame.
 4. Dividing by ACS medians under $500 produced 20× outliers (group quarters,
    token renter counts). Floor the divisor and flag high relative MOE.
+
+## 2026-11-01 — park access past the city line (DEV-329)
+
+The park view stopped at the city boundary because PLUTO does. 1,141 tracts in
+the nine suburban counties rendered blank, which reads on a map as "no parks"
+rather than "no lot file".
+
+Added `scripts/fetch_park_access_region.py`: TIGER/Line 2024 block groups (states
+36 and 34), 2020 decennial population (P1_001N) from the Census API, block-group
+centre → nearest major-park boundary in the same projection and thresholds as the
+lot pass, rolled up to the 2020 tract. Writes `data/park_access_region.json`
+(3,425 tracts). `build_html.py` now merges the two: lot measure inside the city,
+block-group measure outside, with the denominator and its kind carried into the
+detail card and the legend.
+
+Results: suburbia 8.6% within 400 m, 19.4% within 800 m (4.97 M residents) against
+18.8% / 37.6% citywide.
+
+Validation, not assertion: on the 2,281 tracts where both denominators exist the
+shares agree to median 0.0, mean 3.4 points, r = 0.978 — so the seam at the city
+line is continuous rather than a method artefact.
+
+Traps hit:
+
+1. The Census API's `block group` column holds one digit, not the geoid — `tract`
+   comes back as a separate column and has to be concatenated. Keying on the
+   block-group digit alone silently collapsed 11,000 rows to 104.
+2. `fiona` is not installed in this venv; `geopandas.read_file(..., engine="pyogrio")`
+   reads the TIGER zips directly.
+3. OSM polygon areas run light where mapping is thin: Brookdale Park is drawn at
+   65 acres against its 121, so it misses the 100-acre major cut.

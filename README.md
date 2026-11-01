@@ -183,12 +183,37 @@ Manhattan 62%, Staten Island 69%, the Bronx 42%, Queens 32%, Brooklyn 26%.
 **This is a screen, not a network walk.** Straight-line distance ignores the
 river, rail yard or expressway between a lot and a park, so it overstates
 access on waterfront edges and along the big cuts; a routed pedestrian walk
-would show lower figures there. Only the five boroughs have tax-lot
-coordinates, so tracts outside the city stay blank rather than guessing.
+would show lower figures there.
+
+PLUTO stops at the city line, which left the 1,141 tracts in Nassau, Suffolk,
+Westchester, Bergen, Essex, Hudson, Passaic, Union and Middlesex blank.
+`scripts/fetch_park_access_region.py` fills them with the finest denominator the
+Census publishes for the whole region: 2020 census block groups, weighted by
+2020 decennial population. Each block group's centre is run against the same
+major-park set with the same thresholds, and the result rolls up to its 2020
+tract — so outside the city the figure is the share of *residents* within the
+walk, not the share of lots. Just under five million people live in those
+tracts; 8.6% are within 400 m of a major park and 19.4% within 800 m, against
+18.8% and 37.6% across the city's 857,271 lots.
+
+The two denominators are checked against each other rather than assumed
+compatible. On the 2,281 tracts where both exist the tract-level shares agree to
+a median difference of 0 points, a mean of 3.4, r = 0.978 — the seam at the city
+line can be read straight through. The block-group method is coarser where block
+groups are large, so exurban tracts in Suffolk and Middlesex carry more
+approximation than a Brooklyn block does.
+
+The park set outside the city comes from OpenStreetMap, stitched to the NYC
+Parks register at the city line; the regional destinations that dominate the
+suburban numbers — Palisades, South Mountain, Watchung, Garret Mountain,
+Harriman, Liberty State Park, Branch Brook, Eisenhower — are all present, but
+OSM polygon areas run small where the mapping is thin (Brookdale Park is mapped
+at 65 acres against its 121, so it just misses the 100-acre cut).
 
 `scripts/fetch_park_access.py` writes the lot-level table
 (`data/parcels_park_access.csv`, 92 MB, not committed) and the per-tract
-roll-up the map reads (`data/park_access.json`).
+roll-up the map reads (`data/park_access.json`); the block-group pass writes
+`data/park_access_region.json`.
 
 ## Layout
 
