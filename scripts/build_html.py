@@ -1022,17 +1022,52 @@ const D = __DATA__;
 const meta = D.meta;
 const NETC={subway:'#1f6feb',mnr:'#c1121f',lirr:'#b5179e',path:'#0f766e'};
 
+// Boot diagnostics. A blank map with working chrome is nearly impossible to
+// diagnose from a screenshot, and the failure modes are all silent: WebGL refused,
+// the basemap style host unreachable, a blocker eating the tile domain. Each one
+// now names itself on the page instead of leaving a cream rectangle.
+let bootShown=false;
+function boot(msg){
+  if(bootShown) return;
+  bootShown=true;
+  const d=document.createElement('div');
+  d.id='bootmsg';
+  d.style.cssText='position:fixed;top:64px;left:50%;transform:translateX(-50%);'
+    +'z-index:9999;max-width:660px;padding:12px 16px;border-radius:10px;'
+    +'background:#7a2e2e;color:#fdf8f4;font:500 13px/1.45 "Public Sans",system-ui,sans-serif;'
+    +'box-shadow:0 6px 20px rgba(0,0,0,.18)';
+  d.textContent=msg;
+  document.body.appendChild(d);
+}
+window.__boot=boot;
+
 // Basemap: OpenFreeMap "positron" — a pale, low-label style, so the choropleth
 // and the MTA line colours carry the colour and the streets stay legible.
-const map = new maplibregl.Map({
-  container:'map',
-  style:'https://tiles.openfreemap.org/styles/positron',
-  center:[-73.95,40.78],
-  zoom:10,
-  pitch:0,
-  bearing:0,
-  attributionControl:false
-});
+//
+// The style is fetched rather than handed to MapLibre as a URL so that a style
+// outage cannot take the whole page down. If the host is unreachable the map
+// still boots on a plain paper background and every data layer draws as normal;
+// the alternative — the old behaviour — was a blank cream canvas.
+const POSITRON='https://tiles.openfreemap.org/styles/positron';
+const BARE={version:8,sources:{},layers:[
+  {id:'background',type:'background',paint:{'background-color':'#eef0e4'}}]};
+
+let map;
+try{
+  map = new maplibregl.Map({
+    container:'map',
+    style:BARE,
+    center:[-73.95,40.78],
+    zoom:10,
+    pitch:0,
+    bearing:0,
+    attributionControl:false
+  });
+}catch(err){
+  boot('The map could not start in this browser: '+(err&&err.message||err)+
+       '. WebGL is the usual cause — check chrome://gpu, or try another browser.');
+  throw err;
+}
 window.__map = map;   // QA hook: pitch/zoom assertions from scripts/check_render.py
 
 const HOME={center:[-73.99386,40.75056],zoom:12.4};
@@ -1054,6 +1089,20 @@ const stnFC={type:'FeatureCollection',features:D.stations.map(s=>({
 
 const NONE='#000000';
 let ready=false;
+
+// Named failure modes for the two silent ones left: a style/tile request that never
+// completes, and a style document that loads but paints nothing.
+map.on('error',e=>{
+  const m=(e&&e.error&&(e.error.message||String(e.error)))||'unknown map error';
+  (window.__bootErrors=window.__bootErrors||[]).push(m);
+  if(!ready && /style|sprite|glyphs|fetch|network|40[134]/i.test(m))
+    boot('The basemap could not load: '+m+
+         ' — the map needs https://tiles.openfreemap.org; allow it and reload.');
+});
+setTimeout(()=>{
+  if(!ready) boot('The basemap style has not finished loading after 12 s. '
+    +'If a DNS filter or extension is blocking tiles.openfreemap.org, allow it and reload.');
+},12000);
 
 function money(v){return v==null?'—':'$'+v.toLocaleString()}
 function capTxt(v,c){return c?'≥$3,501':money(v)}
@@ -1279,7 +1328,12 @@ function detailHTML(p){
       ${p.trust?'':' ⚠ Too few sample units to trust this estimate.'}</div>`;
 }
 
-map.on('load',()=>{
+function buildLayers(){
+  if(window.__built) return;
+  window.__built=true;
+  // Layers that ride the basemap's own tiles only exist when positron loaded; on
+  // the no-basemap fallback they are simply absent rather than fatal.
+  const addOm=spec=>{ if(map.getSource('openmaptiles')) map.addLayer(spec); };
   // Warm the basemap toward the page paper so the tiles do not read as a grey
   // slab against the cream chrome, and take out the noise that fights the data:
   // the residential wash that greys whole cities, street-name and POI labels,
@@ -1374,7 +1428,7 @@ map.on('load',()=>{
   // schema), so the city can be extruded without a second tileset or any
   // footprint download. Flat building fill is hidden while extrusion is on,
   // otherwise the two z-fight.
-  map.addLayer({id:'buildings-3d',type:'fill-extrusion',source:'openmaptiles',
+  addOm({id:'buildings-3d',type:'fill-extrusion',source:'openmaptiles',
     'source-layer':'building',minzoom:12,
     paint:{
       'fill-extrusion-color':['interpolate',['linear'],['get','render_height'],
@@ -1404,14 +1458,14 @@ map.on('load',()=>{
   // Streets drawn back over the extruded mass. In a 3D city the basemap's own
   // road linework is buried under the buildings, and without a street grid the
   // blocks read as a solid foam model rather than a city.
-  map.addLayer({id:'streets-casing',type:'line',source:'openmaptiles',
+  addOm({id:'streets-casing',type:'line',source:'openmaptiles',
     'source-layer':'transportation',minzoom:11,
     filter:['in',['get','class'],['literal',['motorway','trunk','primary','secondary',
                                              'tertiary','minor','street','service']]],
     paint:{'line-color':'#cfcdbb',
            'line-width':['interpolate',['linear'],['zoom'],11,0.5,14,1.5,17,4.6,19,9.5],
            'line-opacity':0.22}});
-  map.addLayer({id:'streets',type:'line',source:'openmaptiles',
+  addOm({id:'streets',type:'line',source:'openmaptiles',
     'source-layer':'transportation',minzoom:11,
     filter:['in',['get','class'],['literal',['motorway','trunk','primary','secondary',
                                              'tertiary','minor','street','service']]],
@@ -1469,7 +1523,7 @@ map.on('load',()=>{
     .forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','none')});
 
   const placeName=['coalesce',['get','name_en'],['get','name']];
-  map.addLayer({id:'places-town',type:'symbol',source:'openmaptiles','source-layer':'place',
+  addOm({id:'places-town',type:'symbol',source:'openmaptiles','source-layer':'place',
     minzoom:7.5,
     filter:['all',['match',['geometry-type'],['Point'],true,false],
             ['match',['get','class'],['city','town','village'],true,false]],
@@ -1488,7 +1542,7 @@ map.on('load',()=>{
 
   // Boroughs sit above towns: one word to orient the whole view, set wider and
   // heavier than the municipal names so the two tiers never read as equals.
-  map.addLayer({id:'places-borough',type:'symbol',source:'openmaptiles','source-layer':'place',
+  addOm({id:'places-borough',type:'symbol',source:'openmaptiles','source-layer':'place',
     minzoom:9,
     filter:['all',['match',['geometry-type'],['Point'],true,false],
             ['==',['get','class'],'suburb']],
@@ -1607,7 +1661,27 @@ map.on('load',()=>{
   // Amenity GeoJSON runs to a few megabytes; it lands after the first paint so the
   // map is interactive while the parks are still in flight.
   setTimeout(loadAmenities,600);
-});
+}
+
+// Style handoff. A success swaps in positron and builds on its `style.load`; a
+// failure (offline, DNS filter, extension) builds straight onto the bare paper
+// style, so the choropleth and transit stay readable even with no basemap.
+fetch(POSITRON,{signal:(typeof AbortSignal!=='undefined'&&AbortSignal.timeout)
+    ? AbortSignal.timeout(9000) : undefined})
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  .then(style=>{
+    // setStyle fires 'style.load' synchronously for an inline object, so the
+    // listener has to be in place first or the build never happens.
+    map.once('style.load',buildLayers);
+    map.setStyle(style);
+  })
+  .catch(err=>{
+    boot('Basemap tiles are unavailable ('+(err&&err.message||err)+'): the map is '
+      +'showing the data on a plain background. The choropleth, transit lines, parks '
+      +'and every measurement are unaffected.');
+    if(map.isStyleLoaded()) buildLayers();
+    else map.once('load',buildLayers);
+  });
 
 function openDetail(p){
   const d=document.getElementById('detail');
@@ -1770,8 +1844,10 @@ function apply3d(on){
   is3d=on;
   document.getElementById('btn3d').classList.toggle('on',on);
   if(ready){
-    map.setLayoutProperty('buildings-3d','visibility',on?'visible':'none');
-    map.setLayoutProperty('building','visibility',on?'none':'visible');
+    if(map.getLayer('buildings-3d'))
+      map.setLayoutProperty('buildings-3d','visibility',on?'visible':'none');
+    if(map.getLayer('building'))
+      map.setLayoutProperty('building','visibility',on?'none':'visible');
   }
   map.easeTo({pitch:on?40:0,duration:700});
 }
