@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static server for the Housing Explorer build.
+"""Static server for the HomeFinder build.
 
 `python3 -m http.server` does not map .mjs, so it serves the MapLibre 6 module
 bundle as application/octet-stream and the browser refuses to execute it.

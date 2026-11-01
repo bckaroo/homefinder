@@ -1,4 +1,4 @@
-"""Map geometry for the Housing Explorer.
+"""Map geometry for HomeFinder.
 
 Why this module exists
 ----------------------

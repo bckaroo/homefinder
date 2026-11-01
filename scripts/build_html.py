@@ -382,7 +382,7 @@ def render(gj, lines, stations, meta):
 TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Housing Explorer — an open data rent map</title>
+<title>HomeFinder — an open data rent map</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231f4d3d'/%3E%3Cpath d='M2 11h12M4 8h8M6 5h4' stroke='%23fdfcf6' stroke-width='1.4'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -571,7 +571,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       <path d="M6 9h6M6 13h9M6 17h5" stroke="#fdfcf6" stroke-width="1.6" stroke-linecap="round"/>
       <circle cx="17.5" cy="8.5" r="2.4" fill="#fdfcf6"/>
     </svg>
-    Housing Explorer
+    HomeFinder
   </div>
   <div class="right">
     <a href="#" id="toSources">Method &amp; sources</a>

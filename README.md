@@ -1,6 +1,6 @@
-# Transit Housing Analysis Map
+# HomeFinder
 
-PROJ-041 · DevOS-tracked.
+PROJ-041 · DevOS-tracked. Repository folder stays `transit-housing-analysis-map`; the GitHub remote is `bckaroo/homefinder`.
 
 Housing affordability crossed with commute reachability: what does living in a
 place actually cost you in rent and in time, by mode.
