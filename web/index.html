@@ -715,6 +715,40 @@ map.on('load',()=>{
                          ['case',['==',['get','net'],'subway'],4,2.4]],
            'line-opacity':['case',['==',['get','net'],'subway'],0.95,0.75]}});
 
+  // Place names. Positron draws towns and villages in black Noto with a white
+  // halo and has no neighbourhood tier at all, so nothing inside the boroughs is
+  // named. Both fight the editorial shell: the basemap's place layers are turned
+  // off and replaced with two tiers that speak the same language as the rest of
+  // the UI -- small caps, letter-spaced, muted green on paper.
+  ['label_other','label_city','label_city_capital','label_town','label_village']
+    .forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','none')});
+
+  const placeName=['coalesce',['get','name_en'],['get','name']];
+  map.addLayer({id:'places-town',type:'symbol',source:'openmaptiles','source-layer':'place',
+    minzoom:7.5,
+    filter:['all',['match',['geometry-type'],['Point'],true,false],
+            ['match',['get','class'],['city','town','village'],true,false]],
+    layout:{'text-field':placeName,'text-font':['Noto Sans Regular'],
+            'text-transform':'uppercase','text-letter-spacing':0.14,
+            'text-size':['interpolate',['linear'],['zoom'],7.5,9,10,10.5,12,12.5,15,15],
+            'text-padding':6,'text-max-width':8,'symbol-sort-key':['coalesce',['get','rank'],99]},
+    paint:{'text-color':'#3e4f46','text-halo-color':'rgba(246,245,234,0.92)',
+           'text-halo-width':1.4}});
+
+  // Neighbourhoods only earn their place once tracts are individually readable;
+  // below that they are clutter over a choropleth that already carries meaning.
+  map.addLayer({id:'places-hood',type:'symbol',source:'openmaptiles','source-layer':'place',
+    minzoom:10.5,
+    filter:['all',['match',['geometry-type'],['Point'],true,false],
+            ['match',['get','class'],['suburb','quarter','neighbourhood'],true,false]],
+    layout:{'text-field':placeName,'text-font':['Noto Sans Regular'],
+            'text-transform':'uppercase','text-letter-spacing':0.16,
+            'text-size':['interpolate',['linear'],['zoom'],10.5,9,13,10.5,16,12],
+            'text-padding':5,'text-max-width':9,
+            'symbol-sort-key':['case',['==',['get','class'],'neighbourhood'],2,1]},
+    paint:{'text-color':'#6b7a70','text-halo-color':'rgba(246,245,234,0.9)',
+           'text-halo-width':1.2}});
+
   map.addSource('stations',{type:'geojson',data:stnFC});
   // Station dots are noise at city scale: below z11 the network line pattern
   // already reads, and 441 named circles collapse into a rash of white rings.
