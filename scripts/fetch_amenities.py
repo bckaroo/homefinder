@@ -58,7 +58,12 @@ OVERPASS = [
     "https://overpass.private.coffee/api/interpreter",
 ]
 
-MIN_PARK_ACRES = 10.0       # "major parks and open space"
+MIN_PARK_ACRES = 10.0       # legacy: the old >=10-acre cut for the map layer
+ANY_ACRES = 0.25            # smallest thing that counts as a park you can sit in.
+                            # 0.25 ac ~ 1,000 m2. The NYC register carries 2,061
+                            # properties and 1,849 of them are under 10 acres --
+                            # every Manhattan square (Bryant 9.6, Union Square 6.5,
+                            # Madison Square 6.2) was invisible to a 10-acre cut.
 
 # OSM maps the green ribbons beside limited-access roads as leisure=park /
 # protected_area: "Hutchinson River Parkway", "Belt Parkway/Shore Parkway".
@@ -142,12 +147,14 @@ def round_geom(geom, nd: int = 5):
 # ------------------------------------------------------------------ sources
 
 def nyc_parks() -> list[dict]:
-    path = RAW / "nyc" / "parks_properties.geojson"
+    path = RAW / "nyc" / "parks_properties_all.geojson"
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        where = urllib.parse.quote("acres>=10 OR waterfront=true")
+        # No acreage filter: the register's 2,061 properties are the city's own
+        # definition of open space, and 1,849 of them are under 10 acres. Filtering
+        # by size here silently deleted the entire pocket/square park network.
         url = (f"https://data.cityofnewyork.us/resource/{NYC_PARKS}.geojson"
-               f"?$where={where}&$limit=50000")
+               f"?$limit=50000")
         log(f"  nyc parks: downloading")
         path.write_bytes(http(url, timeout=180))
     doc = json.loads(path.read_text())
@@ -364,13 +371,18 @@ def main() -> int:
                 # waterfront flag fires on community gardens and traffic islands
                 # too, so it cannot promote a park into the large tier on its own.
                 "tier": "flagship" if "flagship" in f["park_class"].lower()
-                        else ("large" if f["acres"] >= 100 else "park"),
+                        else ("large" if f["acres"] >= 100
+                              else ("park" if f["acres"] >= 10 else "pocket")),
                 # "major" is the test used for park-access analysis: a
                 # destination you would walk to. 100 acres, or a waterfront park
                 # of at least 20 acres (a river edge is worth a walk even when
                 # the ribbon is narrow).
                 "major": 1 if (f["acres"] >= 100
                                or (f["waterfront"] and f["acres"] >= 20)) else 0,
+                # "any" is the everyday-access test: is there *a park* within a
+                # walk, not just a destination park. 0.25 ac floor drops bare
+                # triangles and median strips while keeping every square.
+                "any": 1 if f["acres"] >= ANY_ACRES else 0,
                 "src": "nyc",
             },
             "geometry": {"type": f["geom"].geom_type,
@@ -406,7 +418,7 @@ def main() -> int:
             continue
         area_m2 = gp.area
         acres = area_m2 / 4046.8564224
-        if acres < MIN_PARK_ACRES:
+        if acres < ANY_ACRES:
             continue
 
         # Skip OSM shapes that merely re-trace a city park we already have.
@@ -443,8 +455,10 @@ def main() -> int:
                 "acres": round(acres, 1),
                 "waterfront": waterfront,
                 "cls": f["kind"],
-                "tier": "large" if acres >= 100 else "park",
+                "tier": ("large" if acres >= 100
+                         else ("park" if acres >= 10 else "pocket")),
                 "major": 1 if (acres >= 100 or (waterfront and acres >= 20)) else 0,
+                "any": 1 if acres >= ANY_ACRES else 0,
                 "src": "osm",
             },
             "geometry": {"type": ll.geom_type,

@@ -40,19 +40,60 @@ def main():
         print("  ! no park_access_region.json — run scripts/fetch_park_access_region.py")
 
     def _pk(g):
+        # Two park measures. a400/a800 = any park of >= 0.25 acre (everyday
+        # access, the headline); p400/p800 = the legacy major-park test
+        # (100+ acres or waterfront 20+), carried as the secondary read.
         v = _pa.get(g)
         if v:
-            return v.get("p400"), v.get("p800"), v.get("lots"), "lot"
+            return (v.get("a400"), v.get("a800"), v.get("lots"), "lot",
+                    v.get("p400"), v.get("p800"))
         v = _preg.get(g)
         if v:
-            return v.get("p400"), v.get("p800"), v.get("pop"), "pop"
-        return None, None, None, None
+            return (v.get("a400"), v.get("a800"), v.get("pop"), "pop",
+                    v.get("p400"), v.get("p800"))
+        return None, None, None, None, None, None
 
     _pks = df.geoid.map(_pk)
     df["pk400"] = [p[0] for p in _pks]
     df["pk800"] = [p[1] for p in _pks]
     df["pkden"] = [p[2] for p in _pks]
     df["pkmethod"] = [p[3] for p in _pks]
+    df["pk400m"] = [p[4] for p in _pks]
+    df["pk800m"] = [p[5] for p in _pks]
+
+    # ---- commerce & culture (scripts/fetch_community.py) ----
+    # Three reads, kept separate on purpose: `des` is where the zoning map puts
+    # commerce (five boroughs only), `com` is where shops actually cluster
+    # (uniform everywhere), `cul`/`wor` are civic anchors. The choropleth uses
+    # `com` because it is the only one that means the same thing in Yonkers
+    # as in Queens; the card shows `des` next to it inside the city.
+    _ca = {}
+    _car = {}
+    for _p, _d in (("commerce_access.json", _ca),
+                   ("commerce_access_region.json", _car)):
+        _f = os.path.join(OUT, _p)
+        if os.path.exists(_f):
+            _d.update(json.load(open(_f)))
+        else:
+            print(f"  ! no {_p} — run scripts/fetch_community.py")
+
+    def _cm(g):
+        v = _ca.get(g) or _car.get(g)
+        if v:
+            return (v.get("c400"), v.get("c800"), v.get("z800"),
+                    v.get("k800"), v.get("w800"),
+                    v.get("lots") or v.get("pop"),
+                    "lot" if v.get("lots") else "pop")
+        return (None,) * 7
+
+    _cms = df.geoid.map(_cm)
+    df["cm400"] = [p[0] for p in _cms]
+    df["cm800"] = [p[1] for p in _cms]
+    df["cmdes"] = [p[2] for p in _cms]
+    df["cul800"] = [p[3] for p in _cms]
+    df["wor800"] = [p[4] for p in _cms]
+    df["cmden"] = [p[5] for p in _cms]
+    df["cmmethod"] = [p[6] for p in _cms]
 
     # ---- reliability gates ----
     df["rel_moe_1br"] = df.rent_1br_moe / df.rent_1br
@@ -134,10 +175,23 @@ def main():
             # the percentage so a 12-lot tract cannot read as a neighbourhood.
             "pk400": None if pd.isna(r.get("pk400")) else float(r.pk400),
             "pk800": None if pd.isna(r.get("pk800")) else float(r.pk800),
+            # the legacy major-park measure, kept as the secondary line
+            "pk400m": None if pd.isna(r.get("pk400m")) else float(r.pk400m),
+            "pk800m": None if pd.isna(r.get("pk800m")) else float(r.pk800m),
             # denominator behind the percentage: tax lots inside NYC, 2020
             # block-group population outside it — and which one it is
             "pkden": None if pd.isna(r.get("pkden")) else int(r.pkden),
             "pkm": None if pd.isna(r.get("pkmethod")) else str(r.pkmethod),
+            # Commerce & culture: shops clustered within a 400 m / 800 m walk
+            # (uniform across the region), the designated-district figure where
+            # a zoning map exists, and civic anchors.
+            "cm400": None if pd.isna(r.get("cm400")) else float(r.cm400),
+            "cm800": None if pd.isna(r.get("cm800")) else float(r.cm800),
+            "cmdes": None if pd.isna(r.get("cmdes")) else float(r.cmdes),
+            "cul800": None if pd.isna(r.get("cul800")) else float(r.cul800),
+            "wor800": None if pd.isna(r.get("wor800")) else float(r.wor800),
+            "cmden": None if pd.isna(r.get("cmden")) else int(r.cmden),
+            "cmm": None if pd.isna(r.get("cmmethod")) else str(r.cmmethod),
         }
 
     gj = geo_prep.feature_collection(m, _props)
@@ -701,6 +755,7 @@ TEMPLATE = r"""<!DOCTYPE html>
         <button data-v="newer">Newer stock</button>
         <button data-v="era">Year built</button>
         <button data-v="park">Park access</button>
+        <button data-v="comm">Commerce</button>
       </div>
 
       <div class="slider">
@@ -729,6 +784,10 @@ TEMPLATE = r"""<!DOCTYPE html>
         <label class="switch"><input type="checkbox" id="showParks" checked><span class="track"></span><span class="knob"></span></label></div>
       <div class="swrow"><span><i class="swl"></i>Bikeways</span>
         <label class="switch"><input type="checkbox" id="showBike" checked><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span><i class="sws" style="background:#c9a880"></i>Commercial areas</span>
+        <label class="switch"><input type="checkbox" id="showComm"><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span><i class="sws" style="background:#7f9a6f"></i>Culture venues</span>
+        <label class="switch"><input type="checkbox" id="showCult"><span class="track"></span><span class="knob"></span></label></div>
 
       <div class="keys" id="keysFit">
         <div class="krow"><span class="sw" style="background:var(--ok)"></span>Median rent in your band (reliable)</div>
@@ -767,17 +826,38 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
 
       <div class="keys" id="keysPark" hidden>
-        <div class="lbl" style="margin-bottom:8px">Residents (or tax lots in NYC) within a 10-minute walk of a major park</div>
+        <div class="lbl" style="margin-bottom:8px">Residents (or tax lots in NYC) within a 10-minute walk of a park</div>
         <div class="ramp" style="background:linear-gradient(90deg,#e2e9ea,#cbd8e0,#a8bed2,#7d9dba,#4f7498)"></div>
         <div class="rampend"><span>0%</span><span>100%</span></div>
         <div class="krow"><span class="sw" style="background:var(--flat)"></span>No residents, or no tax lots, to measure</div>
         <div style="margin-top:10px;font-size:11.5px;line-height:1.45;color:#6b857c">
-          Major park = 100 acres or more, or a waterfront park of 20 acres or
-          more. In the five boroughs the share is of PLUTO tax lots; outside
+          Park = any NYC Parks property of 0.25 acre or more, or an OSM park of
+          the same floor. A 100-acre cut was the earlier test and it deleted the
+          whole Manhattan square network — Bryant (9.6 ac), Union Square (6.5),
+          Madison Square (6.2) are the open space those neighbourhoods use, so
+          the share counts them. The large-park (100+ acre) figure is carried
+          separately in the detail card. In the five boroughs the share is of PLUTO tax lots; outside
           them it is of 2020 census block-group population, the finest
           denominator that covers the whole region. Distance runs straight to
           the park boundary — a screen, so it overstates access across a river,
           rail yard or expressway.</div>
+      </div>
+
+      <div class="keys" id="keysComm" hidden>
+        <div class="lbl" style="margin-bottom:8px">Within a 10-minute walk of a commercial area</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#efe8de,#ddc9ae,#c9a880,#ad7f57,#8a5a38)"></div>
+        <div class="rampend"><span>0%</span><span>100%</span></div>
+        <div class="krow"><span class="sw" style="background:var(--flat)"></span>No residents, or no tax lots, to measure</div>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.45;color:#6b857c">
+          A commercial area is a place with at least ten shops or services within
+          250 m of one another (OpenStreetMap), so the test asks the same thing
+          in a Westchester downtown and a Brooklyn avenue. In the five boroughs
+          the detail card also gives the share near a <em>designated</em>
+          commercial district — a commercial overlay, a C-zoned lot or a Business
+          Improvement District — which is the zoning map's own answer and exists
+          nowhere else in the region. Distances are straight-line from the tract
+          centre to the nearest shop in a cluster: a screen, not a routed walk.
+        </div>
       </div>
     </div>
 
@@ -828,7 +908,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
       <div>
         <h4>Parks &amp; open space</h4>
-        <p>Every park or protected open space over 10 acres. Inside the five boroughs
+        <p>Every park or protected open space of 0.25 acre or more — all 2,061 NYC
+          Parks property records, plus OSM parks outside the city. Inside the five boroughs
           the shapes, acreage and waterfront flag are NYC Parks' own property records,
           so tiers there are surveyed rather than estimated. Outside the city the
           polygons are OpenStreetMap, with acreage computed in a local metric projection
@@ -840,7 +921,7 @@ TEMPLATE = r"""<!DOCTYPE html>
         <h4>Park access</h4>
         <p>Two denominators, one question — how much of a place sits within a walk
           of a park worth walking to. Inside the five boroughs, each PLUTO 26v2
-          tax lot (857,347 records) is matched to the nearest <i>major</i> park and
+          tax lot (857,347 records) is matched to the nearest park and
           the straight-line distance from the lot's coordinate to the park's
           boundary is measured in a local metric projection; the tract figure is
           the share of <b>lots</b>. Outside the city there is no lot file, so the
@@ -869,6 +950,30 @@ TEMPLATE = r"""<!DOCTYPE html>
           the city (the East Coast Greenway and its kin) come from OpenStreetMap
           <i>route=bicycle</i> relations and are drawn dashed-free but wider, labelled
           along the line. Linework is simplified at 8 m for payload size.</p>
+      </div>
+      <div>
+        <h4>Commercial districts &amp; culture</h4>
+        <p><b>Designated commerce</b> (five boroughs only): the NYC Zoning Tax Lot
+          Database, every lot carrying a commercial overlay or a C1–C8 zoning
+          district, plus every lot inside a Business Improvement District polygon
+          (NYC Small Business Services, 76 BIDs). That is the zoning map's own
+          answer to where local retail belongs — and it stops at the city line,
+          because no suburban county publishes a comparable layer.</p>
+        <p><b>Actual commerce</b> (everywhere): OpenStreetMap shops and service
+          businesses, 43.5k of them across the study area. A shop counts as part
+          of a commercial area when at least 10 establishments sit within 250 m of
+          one another, which finds both an avenue in Queens and a strip on Route
+          22. This is the measure the choropleth colours, because it means the
+          same thing on both sides of the city line.</p>
+        <p><b>Culture</b>: libraries, museums, community and arts centres,
+          theatres, cinemas and public markets from OSM, counted separately from
+          places of worship — worship is a civic anchor too, but far denser, and
+          mixing them would flatten the libraries into noise. Museums are
+          undercounted in OSM, so treat that line as a floor.</p>
+        <p>Walk distances are straight-line from the tract centre (or block-group
+          centre outside the city) to the nearest anchor: 400 m ≈ 5 minutes, 800 m
+          ≈ 10. A screen, not a routed walk — it overstates access across a river,
+          rail yard or motorway.</p>
       </div>
       <div>
         <h4>Geometry</h4>
@@ -1010,10 +1115,9 @@ const ERA_STOPS=[[1900,'#8c9aa3'],[1930,'#a9b3a8'],[1950,'#d3cfb4'],[1970,'#e0c4
 // Park access is a share, not a price: paper -> slate blue for the proportion
 // of a tract's tax lots that stand within a 10-minute walk of a major park.
 // Deliberately blue, so it cannot be confused with the teal "newer stock" ramp.
-// The floor is a cool grey-teal, not paper: half of the city's tracts sit at
-// zero, and a 0% that looks like an empty map is a different claim from a 0%
-// that looks analysed. No-data tracts are transparent, so this tint has to
-// read as "counted, none nearby".
+// The floor is a cool grey-teal, not paper: a 0% that looks like an empty map
+// is a different claim from a 0% that looks analysed. No-data tracts are
+// transparent, so this tint has to read as "counted, none nearby".
 const PARK_STOPS=[[0,'#e2e9ea'],[25,'#cbd8e0'],[50,'#a8bed2'],[75,'#7d9dba'],[100,'#4f7498']];
 const PAPER='#f6f5ea';
 
@@ -1041,7 +1145,7 @@ function colorMode(){
 // anywhere (button, reset, saved state) cannot leave the wrong legend on screen.
 function syncKeys(){
   const m=colorMode();
-  const KEYS={fit:'keysFit',ask:'keysAsk',prem:'keysPrem',newer:'keysNewer',era:'keysEra',park:'keysPark'};
+  const KEYS={fit:'keysFit',ask:'keysAsk',prem:'keysPrem',newer:'keysNewer',era:'keysEra',park:'keysPark',comm:'keysComm'};
   Object.keys(KEYS).forEach(k=>{
     const el=document.getElementById(KEYS[k]);
     if(el) el.hidden=(k!==m);
@@ -1080,6 +1184,14 @@ function parkColor(p){
   return ramp(PARK_STOPS,Math.max(0,Math.min(p.pk800,100)));
 }
 
+// Commerce: the shop-cluster measure, because it is the only version of the
+// question that can be asked in Irvington and in Ridgewood with the same units.
+const COMM_STOPS=[[0,'#efe8de'],[25,'#ddc9ae'],[50,'#c9a880'],[75,'#ad7f57'],[100,'#8a5a38']];
+function commColor(p){
+  if(p.cm800==null) return null;
+  return ramp(COMM_STOPS,Math.max(0,Math.min(p.cm800,100)));
+}
+
 function fillFor(p,cmax,rmin,rmax){
   const t=modeMin(p);
   if(t==null||t>cmax) return null;
@@ -1089,6 +1201,7 @@ function fillFor(p,cmax,rmin,rmax){
   if(m==='newer') return newerColor(p);
   if(m==='era') return eraColor(p);
   if(m==='park') return parkColor(p);
+  if(m==='comm') return commColor(p);
   return color(p,cmax,rmin,rmax);
 }
 
@@ -1144,9 +1257,15 @@ function detailHTML(p){
     <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
     <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
     ${stockBlock(p)}
-    ${p.pk800==null?'':`<div class="kv"><span>${p.pkm==='pop'?'Residents':'Lots'} near a major park</span><b>${p.pk800}% (10 min walk)</b></div>
+    ${p.pk800==null?'':`<div class="kv"><span>${p.pkm==='pop'?'Residents':'Lots'} near a park</span><b>${p.pk800}% (10 min walk)</b></div>
     <div class="kv"><span>…within 5 min walk</span><b>${p.pk400}%</b></div>
+    ${p.pk800m==null?'':`<div class="kv"><span>…near a large park (100+ ac)</span><b class="dim">${p.pk800m}% (10 min)</b></div>`}
     ${p.pkden==null?'':`<div class="kv"><span>Denominator</span><b class="dim">${p.pkden.toLocaleString()} ${p.pkm==='pop'?'residents (block groups)':'tax lots'}</b></div>`}`}
+    ${p.cm800==null?'':`<div class="kv"><span>${p.cmm==='pop'?'Residents':'Lots'} near commerce</span><b>${p.cm800}% (10 min walk)</b></div>
+    <div class="kv"><span>…within 5 min walk</span><b>${p.cm400}%</b></div>
+    ${p.cmdes==null?'':`<div class="kv"><span>…near a designated district</span><b class="dim">${p.cmdes}% (10 min)</b></div>`}
+    ${p.cul800==null?'':`<div class="kv"><span>Culture venue in 10 min</span><b>${p.cul800}%</b></div>`}
+    ${p.wor800==null?'':`<div class="kv"><span>Place of worship in 10 min</span><b class="dim">${p.wor800}%</b></div>`}`}
     ${p.ask==null?
       `<div class="kv"><span>Asking, all units</span><b class="dim">no ZIP index</b></div>`:
       `<div class="kv"><span>Asking, all units</span><b>$${p.ask.toLocaleString()}</b></div>
@@ -1218,6 +1337,33 @@ map.on('load',()=>{
            'fill-opacity':['interpolate',['linear'],['zoom'],
              9,['case',['==',['get','waterfront'],1],0.28,0.18],
              14,['case',['==',['get','waterfront'],1],0.40,0.30]]}});
+  // Commercial fabric: 200 m cells that hold at least one anchor (a zoned lot
+  // or a shop in a cluster). A cell grid rather than the 135k points behind it —
+  // same shape, a tenth of the bytes. Drawn beneath the park wash so open space
+  // keeps its edge, and left off until asked for, because the choropleth is the
+  // primary reading.
+  map.addSource('comm',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'comm-fill',type:'fill',source:'comm',minzoom:10.4,
+    layout:{visibility:'none'},
+    paint:{'fill-color':['case',['==',['get','kind'],'zone'],'#b98a5f',
+                         ['==',['get','kind'],'both'],'#a9744f','#c9a880'],
+           'fill-opacity':['interpolate',['linear'],['zoom'],10.4,0.04,14,0.10],
+           'fill-outline-color':'#1f6f5c'}},
+    'parks-fill');
+  map.addSource('bids',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'bids-line',type:'line',source:'bids',minzoom:10.4,
+    layout:{visibility:'none'},
+    paint:{'line-color':'#8a5a38','line-width':['interpolate',['linear'],['zoom'],10.4,0.8,15,1.8],
+           'line-opacity':0.75,'line-dasharray':[2,2]}},
+    'parks-fill');
+  map.addSource('cult',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'cult',type:'circle',source:'cult',minzoom:11.2,
+    layout:{visibility:'none'},
+    paint:{'circle-radius':['interpolate',['linear'],['zoom'],11.2,2.8,13,3.6,16,5.6],
+           'circle-color':['match',['get','kind'],'library','#4a7a4f','museum','#6b5b95',
+                           'community_centre','#33786c','arts_centre','#a86b3c',
+                           'theatre','#8c3f52','cinema','#8c3f52','#7f9a6f'],
+           'circle-opacity':0.95,'circle-stroke-width':1.1,'circle-stroke-color':'#fdfcf6'}});
   map.addLayer({id:'parks-line',type:'line',source:'parks',
     paint:{'line-color':['case',['==',['get','waterfront'],1],'#39786f','#4e7649'],
            'line-width':['interpolate',['linear'],['zoom'],9,0.7,13,1.2,16,2.0],
@@ -1542,6 +1688,15 @@ document.getElementById('cmode').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#cmode button').forEach(x=>x.classList.toggle('on',x===b));
   syncKeys();
+  // The colour mode and the fabric layer answer the same question, so picking
+  // Commerce also puts the commercial areas on the map — the shading alone
+  // cannot show where the shops actually are.
+  if(b.dataset.v==='comm'){
+    const box=document.getElementById('showComm');
+    if(box && !box.checked){ box.checked=true; }
+    applyCommVis();
+    loadCommerce();
+  }
   draw();
 };
 let is3d=false, auto3d=false, treesLoaded=false;
@@ -1577,6 +1732,39 @@ async function loadAmenities(){
     const b=await (await fetch('bikeways.geojson')).json();
     map.getSource('bike').setData(b);
   }catch(e){ console.warn('bikeways unavailable',e); }
+}
+// Commerce and culture layers: 2.7 MB of GeoJSON, fetched once and only when
+// asked for — either the commerce colour mode or one of the two switches.
+let commLoaded=false;
+let commPromise=null;
+function loadCommerce(){
+  if(commPromise) return commPromise;
+  commPromise=(async()=>{
+    try{
+      const c=await (await fetch('commerce_cells.geojson')).json();
+      map.getSource('comm').setData(c);
+    }catch(e){ console.warn('commerce cells unavailable',e); }
+    try{
+      const b=await (await fetch('bids.geojson')).json();
+      map.getSource('bids').setData(b);
+    }catch(e){ console.warn('BID outlines unavailable',e); }
+    try{
+      const k=await (await fetch('culture.geojson')).json();
+      map.getSource('cult').setData(k);
+    }catch(e){ console.warn('culture venues unavailable',e); }
+    commLoaded=true;
+    applyCommVis();
+  })();
+  return commPromise;
+}
+function applyCommVis(){
+  if(!ready) return;
+  const boxes=['showComm','showCult'].map(id=>document.getElementById(id));
+  if(!boxes[0]||!boxes[1]) return;
+  const vis=(on)=>on?'visible':'none';
+  ['comm-fill','bids-line'].forEach(id=>
+    map.setLayoutProperty(id,'visibility',vis(boxes[0].checked)));
+  map.setLayoutProperty('cult','visibility',vis(boxes[1].checked));
 }
 function apply3d(on){
   is3d=on;
@@ -1632,6 +1820,11 @@ document.getElementById('showBike').onchange=e=>{
   ['bike-regional','bike-primary','bike-local','bike-label'].forEach(id=>
     map.setLayoutProperty(id,'visibility',e.target.checked?'visible':'none'));
 };
+// Toggling a switch must repaint immediately; loadCommerce() only calls
+// applyCommVis() the first time the file arrives, so a switch flipped while
+// the geojson is pending would otherwise never take effect.
+document.getElementById('showComm').onchange=()=>{ applyCommVis(); loadCommerce(); };
+document.getElementById('showCult').onchange=()=>{ applyCommVis(); loadCommerce(); };
 
 </script></body></html>"""
 

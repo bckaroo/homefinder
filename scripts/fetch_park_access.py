@@ -1,8 +1,16 @@
 
-"""Parcel-level access to major parks.
+"""Parcel-level access to parks, measured two ways.
 
-Major park = >= MAJOR_ACRES acres OR flagged waterfront (the "large parks and
-waterfront parks" definition already used on the map).
+Two measures, because "park access" is two different questions:
+  * any park  -- is there a park of >= 0.25 acre within the walk?  This is the
+                 everyday-access measure, and inside the city it is the
+                 meaningful one: Bryant (9.6 ac), Union Square (6.5) and Madison
+                 Square (6.2) all fail a 10-acre cut, and they are the open space
+                 those neighbourhoods actually use.
+  * major park -- >= 100 acres, or a waterfront park of >= 20 acres (the
+                 destination measure the map has always used).
+
+Reporting only the second number overstates park poverty in dense Manhattan.
 
 Walking distance is measured as straight-line distance from the tax lot
 coordinate to the nearest major-park boundary, at two thresholds:
@@ -85,7 +93,8 @@ def main():
     # and traffic islands, so it cannot be used on its own to define a park
     # worth walking to.
     major = [f for f in parks if f["properties"].get("major")]
-    print(f"major parks: {len(major)} of {len(parks)}")
+    anyp = [f for f in parks if f["properties"].get("any")]
+    print(f"parks: {len(parks)} total | {len(anyp)} any-scale | {len(major)} major")
 
     # local metric projection around the city (equirectangular, good to <0.1%)
     LAT0, LON0 = 40.70, -73.95
@@ -98,7 +107,11 @@ def main():
     props = [f["properties"] for f in major]
     proj = [sh_transform(to_xy, g) for g in geoms]
     tree = shapely.STRtree(proj)
-    print("index built")
+
+    any_proj = [sh_transform(to_xy, shape(f["geometry"])) for f in anyp]
+    any_props = [f["properties"] for f in anyp]
+    any_tree = shapely.STRtree(any_proj)
+    print("index built (major + any)")
 
     csv_path = fetch_pluto()
 
@@ -118,14 +131,23 @@ def main():
             dist = float(pt.distance(proj[pi]))
             n400 = dist <= NEAR_M
             n800 = dist <= WALK_M
+            # nearest any-scale park boundary
+            ai = int(any_tree.nearest(pt))
+            dist_a = float(pt.distance(any_proj[ai]))
+            a400 = dist_a <= NEAR_M
+            a800 = dist_a <= WALK_M
             out_rows.append((r["bbl"], r["borough"], r["address"], r["bct2020"],
                              r["unitsres"], r["yearbuilt"], r["landuse"],
                              round(lat, 6), round(lon, 6), round(dist, 1),
-                             int(n400), int(n800), props[pi]["name"]))
+                             int(n400), int(n800), props[pi]["name"],
+                             round(dist_a, 1), int(a400), int(a800),
+                             any_props[ai]["name"]))
             tr = r["bct2020"]
             if tr:
-                a = tract.setdefault(tr, [0, 0, 0, 0])   # lots, near400, near800, resunits
+                # lots, near400, near800, resunits, any400, any800
+                a = tract.setdefault(tr, [0, 0, 0, 0, 0, 0])
                 a[0] += 1; a[1] += n400; a[2] += n800
+                a[4] += a400; a[5] += a800
                 try:
                     a[3] += int(float(r["unitsres"] or 0))
                 except ValueError:
@@ -139,21 +161,27 @@ def main():
         w = csv.writer(fh)
         w.writerow(["bbl", "borough", "address", "tract2020", "units_res",
                     "year_built", "land_use", "lat", "lon",
-                    "dist_m", "within_400m", "within_800m", "nearest_park"])
+                    "dist_m", "within_400m", "within_800m", "nearest_park",
+                    "dist_any_m", "within_400m_any", "within_800m_any",
+                    "nearest_any_park"])
         w.writerows(out_rows)
     print(f"wrote {csv_out}  ({len(out_rows)} lots)")
 
     # tract aggregation: 2020 tract key -> the map's tract geoid (11-digit)
     BORO = {"MN": "36061", "BX": "36005", "BK": "36047", "QN": "36081", "SI": "36085"}
     tract_out = {}
-    for tr, (lots, n4, n8, _units) in tract.items():
+    for tr, (lots, n4, n8, _units, a4, a8) in tract.items():
         if not tr or len(tr) != 7:
             continue
         b = tr[0]; t = tr[1:]
         fips = {"1": "36061", "2": "36005", "3": "36047", "4": "36081", "5": "36085"}[b]
         geoid = fips + t.zfill(6)
+        # p400/p800 stay the major-park measure (unchanged meaning for existing
+        # consumers); a400/a800 are the any-scale measure.
         tract_out[geoid] = dict(lots=lots, p400=round(100 * n4 / lots, 1),
-                                p800=round(100 * n8 / lots, 1))
+                                p800=round(100 * n8 / lots, 1),
+                                a400=round(100 * a4 / lots, 1),
+                                a800=round(100 * a8 / lots, 1))
     json.dump(tract_out, open(os.path.join(DATA, "park_access.json"), "w"))
     json.dump(tract_out, open(os.path.join(HERE, "web", "park_access.json"), "w"))
     print(f"tracts with park access: {len(tract_out)}")

@@ -112,10 +112,11 @@ def load_block_groups(want_tracts):
 def main():
     parks = json.load(open(os.path.join(HERE, "web", "parks.geojson")))["features"]
     major = [f for f in parks if f["properties"].get("major")]
+    anyp = [f for f in parks if f["properties"].get("any")]
     tracts = json.load(open(os.path.join(DATA, "tracts.geojson")))["features"]
     want = {f["properties"]["geoid"] for f in tracts
             if f["properties"]["geoid"][:5] in COUNTIES}
-    print(f"parks: {len(major)} major | tracts to fill: {len(want)}")
+    print(f"parks: {len(anyp)} any-scale, {len(major)} major | tracts to fill: {len(want)}")
 
     # same equirectangular projection as the lot-level pass
     LAT0, LON0 = 40.70, -73.95
@@ -127,7 +128,9 @@ def main():
 
     proj = [sh_transform(to_xy, shape(f["geometry"])) for f in major]
     tree = shapely.STRtree(proj)
-    print("park index built")
+    any_proj = [sh_transform(to_xy, shape(f["geometry"])) for f in anyp]
+    any_tree = shapely.STRtree(any_proj)
+    print("park index built (major + any)")
 
     pop = bg_population()
     bgs = load_block_groups(want)
@@ -140,7 +143,10 @@ def main():
         c = sh_transform(to_xy, geom.centroid)
         pi = int(tree.nearest(c))
         dist = float(c.distance(proj[pi]))
-        a = agg.setdefault(geoid[:11], dict(pop=0, n4=0, n8=0, nbg=0, blank=0))
+        ai = int(any_tree.nearest(c))
+        dist_a = float(c.distance(any_proj[ai]))
+        a = agg.setdefault(geoid[:11], dict(pop=0, n4=0, n8=0, nbg=0, blank=0,
+                                           a4=0, a8=0))
         a["nbg"] += 1
         if p <= 0:
             a["blank"] += 1
@@ -150,6 +156,10 @@ def main():
             a["n4"] += p
         if dist <= WALK_M:
             a["n8"] += p
+        if dist_a <= NEAR_M:
+            a["a4"] += p
+        if dist_a <= WALK_M:
+            a["a8"] += p
 
     out = {}
     for geoid, a in agg.items():
@@ -157,6 +167,8 @@ def main():
             continue          # no residents: nothing to express as a share
         out[geoid] = dict(p400=round(100 * a["n4"] / a["pop"], 1),
                           p800=round(100 * a["n8"] / a["pop"], 1),
+                          a400=round(100 * a["a4"] / a["pop"], 1),
+                          a800=round(100 * a["a8"] / a["pop"], 1),
                           pop=a["pop"], nbg=a["nbg"])
         missing_pop += a["blank"]
     path = os.path.join(DATA, "park_access_region.json")

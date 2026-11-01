@@ -158,39 +158,116 @@ a bridge with a rail line, the rail still reads first.
 Both files are fetched once, after the first paint, so the map is interactive
 before the amenities land.
 
+### Commerce and community
+
+The commerce view answers a different question from park access: not "is there
+open space near here" but "is there somewhere to walk to". Three measures are
+built on one 800 m (ten-minute) walk radius and written onto
+`data/commerce_access.json` for the five boroughs and
+`data/commerce_access_region.json` for the suburban counties.
+
+**Designation.** Every tax lot in the 857,951-row zoning-lot register whose
+zoning district is a commercial overlay (C1-1 through C8-4) or a commercial
+district is treated as a designated commercial place — 100,101 distinct BBLs,
+within 0.99% of the count derived independently from PLUTO. BIDs come from the
+300-polygon city register. This measure asks where the zoning map *says*
+commerce belongs. In the city it turns out to be near-universal: **98.7% of
+lots sit within 800 m of a designated commercial place** (89.2% within 400 m),
+and 2,202 of 2,312 tracts are at 100%. The designation is a property of the
+whole city, not a way to tell neighbourhoods apart, and it is carried as
+context rather than as a headline.
+
+**Behaviour.** OSM shops and services (43,544 nodes, 33,876 of them sitting in a
+cluster of at least ten shops within 250 m) measure where commerce actually is,
+and they are the only one of the three measures that exists uniformly across
+all 31 counties. Citywide **77.7% of lots** are within 800 m of a shop cluster
+(57.1% within 400 m); by borough at 800 m, Manhattan 99.6%, Staten Island
+84.0%, Brooklyn 81.1%, Queens 80.7%, Bronx 38.2%. Outside the city **39.5% of
+residents** are within 800 m of a cluster (20.5% within 400 m).
+
+The Bronx figure is the one to read carefully. The Hub and Fordham Road are
+mapped in detail — 216 shop nodes in a 2.7 km² box — while the residential
+interior carries ten in a comparable area, so the low share is mostly a real
+pattern of commerce concentrated on a few corridors rather than a mapping hole.
+OSM coverage is still uneven across the region, thinner in the Bronx and in
+outer Queens than in Manhattan, so the behaviour figure is a floor: a tract
+scored low is not evidence of no commerce, only of none mapped.
+
+**Culture.** Libraries, museums, community and arts centres, theatres, cinemas
+and public markets (2,130 OSM features) are counted on the same radius.
+Citywide **72.3% of lots** are within 800 m of a culture venue; outside the city
+**49.8% of residents** are. Places of worship are counted separately and are
+almost everywhere — 96.1% of city lots and 83.8% of suburban residents — so the
+worship line is shown but does not drive the colour ramp.
+
+**Same straight-line caveat as park access.** Distances are measured from lot
+or block-group centroid to the nearest anchor, with no river, rail cut or
+expressway between them, so waterfront and highway-edge tracts are overstated.
+A routed pedestrian walk would pull every figure down, unevenly.
+
+The map reads this as a warm sand-to-brown ramp: the share of a tract's lots (or
+residents, outside the city) within an 800 m walk of a shop cluster, with the
+designation and culture layers as toggles. Two overlays ride on top — the
+designated commercial fabric drawn as a 200 m grid of teal outlines, and the
+culture venues as dots — because a warm fill on the warm ramp disappeared into
+the choropleth beneath it.
+
 ### Park access
 
 The park-access view answers a question the rent choropleth cannot: how much of
-a neighbourhood actually sits within a walk of a park worth walking to. Every
-PLUTO tax lot — 857,347 records in the 26v2 release — is matched to the nearest
-*major* park, and the straight-line distance from the lot's coordinate to that
-park's boundary is measured in a local metric projection.
+a neighbourhood actually sits within a walk of a park. Every PLUTO tax lot —
+857,347 records in the 26v2 release — is matched to the nearest park boundary,
+and the straight-line distance from the lot's coordinate to that boundary is
+measured in a local metric projection.
 
-*Major* means 100 acres or more, or a waterfront park of at least 20 acres. The
-acreage test alone would miss the river parks; the register's own waterfront
-flag alone would let in community gardens and traffic islands, since it fires
-on any park in a waterfront zone. Both conditions are combined into a `major`
-property on `web/parks.geojson` by `scripts/fetch_amenities.py`, so the access
-analysis and the park styling share one definition.
+**Two park sets, because "park access" is two questions.** The headline is
+*any park*: every NYC Parks property record of 0.25 acre or more — 2,061
+properties in the register, and 1,849 of them are under 10 acres — plus OSM
+parks above the same floor outside the city. The secondary read is the older
+*large park* test: 100 acres or more, or a waterfront park of at least 20
+acres. A 10-acre floor had been applied when the register was fetched, which
+silently deleted the entire Manhattan square network — Bryant Park (9.6 ac),
+Union Square Park (6.5), Madison Square Park (6.2), Washington Square (9.7),
+Greeley Square (0.14) — and those squares are the open space those
+neighbourhoods actually use. Reporting only the large-park number made dense
+Manhattan look park-poor when it is the best-served borough in the city. Both
+flags (`any`, `major`) are written onto `web/parks.geojson` by
+`scripts/fetch_amenities.py`, so the access analysis and the park styling share
+one definition.
 
 Two thresholds are reported, 400 m (about five minutes) and 800 m (about ten).
 Tract figures are the share of *lots*, not of land or of people: a tract of
 large industrial parcels and a tract of narrow rowhouses count the same way, so
-the lot count travels with the figure in the detail card. Lots within 400 m of
-a major park are 18.8% citywide; within 800 m, 37.6%. By borough at 800 m:
-Manhattan 62%, Staten Island 69%, the Bronx 42%, Queens 32%, Brooklyn 26%.
+the lot count travels with the figure in the detail card.
+
+Any park, citywide: **74.7% of lots within 400 m**, 98.6% within 800 m; by
+residential unit, 85.4% and 99.4%. By borough at 400 m (lots) — Manhattan 96.9%,
+Staten Island 79.0%, Bronx 78.5%, Brooklyn 76.4%, Queens 67.8%; at 800 m every
+borough is at or above 97.3%. The large-park test gives 18.8% at 400 m and
+37.6% at 800 m (Manhattan 29.0% / 62.0%, Staten Island 40.0% / 68.5%) and is
+carried as the secondary line in the detail card.
+
+At 800 m the any-park measure saturates: 98.6% of lots, so it stops
+discriminating between neighbourhoods and the 400 m figure is the one with
+signal. That saturation is a finding, not a defect — the ten-minute-walk
+standard is effectively met citywide, and the remaining gaps are the
+low-density, industrial-adjacent edges (Jamaica Bay, eastern Queens, Hunts
+Point, the East New York industrial belt).
 
 **This is a screen, not a network walk.** Straight-line distance ignores the
 river, rail yard or expressway between a lot and a park, so it overstates
 access on waterfront edges and along the big cuts; a routed pedestrian walk
-would show lower figures there.
+would show lower figures there. It also counts a 0.25-acre sitting triangle the
+same as a 6-acre square, and the register includes properties that are not
+freely public at all hours — the measure answers "is there open space mapped
+here", not "is the gate open".
 
 PLUTO stops at the city line, which left the 1,141 tracts in Nassau, Suffolk,
 Westchester, Bergen, Essex, Hudson, Passaic, Union and Middlesex blank.
 `scripts/fetch_park_access_region.py` fills them with the finest denominator the
 Census publishes for the whole region: 2020 census block groups, weighted by
-2020 decennial population. Each block group's centre is run against the same
-major-park set with the same thresholds, and the result rolls up to its 2020
+2020 decennial population. Each block group's centre is run against both park sets with the same
+thresholds, and the result rolls up to its 2020
 tract — so outside the city the figure is the share of *residents* within the
 walk, not the share of lots. Just under five million people live in those
 tracts; 8.6% are within 400 m of a major park and 19.4% within 800 m, against
