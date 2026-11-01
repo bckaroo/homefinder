@@ -126,6 +126,70 @@ build and registers the `.mjs` MIME type that `python3 -m http.server` omits.
 v6 also brings the `sky` layer the v4 build could not have, so the horizon now
 carries the same paper-toned haze the rest of the shell uses.
 
+### Amenities
+
+Parks and bikeways are the first layers on the map that describe a place
+rather than a price, and neither exists in the basemap at a useful scale:
+Positron washes every park the same pale green and drops greenways entirely.
+
+Parks ship as every open space over **10 acres**, from two records stitched at
+the city line. Inside the five boroughs the shapes, acreage and waterfront flag
+are NYC Parks' own property records, so a flagship park is the agency's
+classification and not an inference. Outside the city the polygons are
+OpenStreetMap, with acreage measured in a local metric projection and
+*waterfront* assigned only where the park edge comes within 120 m of a mapped
+water body or the coastline — an intersection test, not a name match. OSM
+shapes that merely re-trace a city park are dropped by a 50%-overlap test, so
+nothing is drawn twice. Waterfront parks take a blue-green fill; inland parks
+stay green; the fill is translucent enough that the tract colour still reads
+through, because a big park should look like a hole in the rents, not a hole in
+the map.
+
+Bikeways are NYC DOT's current routes, facility classes I and II — greenways,
+protected and off-street paths, striped lanes. Class III (shared and signed
+street) is deliberately excluded: a painted shared lane is a designation, not
+infrastructure. Class I draws from z10.4, class II only from z12.2, so the
+picture at metro scale is the protected network rather than a web of bike
+lanes. Named long-distance routes from OSM `route=bicycle` relations — the
+East Coast Greenway and its kin — draw wider underneath and label along the
+line. All of it is inserted beneath the transit casing: where a greenway shares
+a bridge with a rail line, the rail still reads first.
+
+Both files are fetched once, after the first paint, so the map is interactive
+before the amenities land.
+
+### Park access
+
+The park-access view answers a question the rent choropleth cannot: how much of
+a neighbourhood actually sits within a walk of a park worth walking to. Every
+PLUTO tax lot — 857,347 records in the 26v2 release — is matched to the nearest
+*major* park, and the straight-line distance from the lot's coordinate to that
+park's boundary is measured in a local metric projection.
+
+*Major* means 100 acres or more, or a waterfront park of at least 20 acres. The
+acreage test alone would miss the river parks; the register's own waterfront
+flag alone would let in community gardens and traffic islands, since it fires
+on any park in a waterfront zone. Both conditions are combined into a `major`
+property on `web/parks.geojson` by `scripts/fetch_amenities.py`, so the access
+analysis and the park styling share one definition.
+
+Two thresholds are reported, 400 m (about five minutes) and 800 m (about ten).
+Tract figures are the share of *lots*, not of land or of people: a tract of
+large industrial parcels and a tract of narrow rowhouses count the same way, so
+the lot count travels with the figure in the detail card. Lots within 400 m of
+a major park are 18.8% citywide; within 800 m, 37.6%. By borough at 800 m:
+Manhattan 62%, Staten Island 69%, the Bronx 42%, Queens 32%, Brooklyn 26%.
+
+**This is a screen, not a network walk.** Straight-line distance ignores the
+river, rail yard or expressway between a lot and a park, so it overstates
+access on waterfront edges and along the big cuts; a routed pedestrian walk
+would show lower figures there. Only the five boroughs have tax-lot
+coordinates, so tracts outside the city stay blank rather than guessing.
+
+`scripts/fetch_park_access.py` writes the lot-level table
+(`data/parcels_park_access.csv`, 92 MB, not committed) and the per-tract
+roll-up the map reads (`data/park_access.json`).
+
 ## Layout
 
 ```

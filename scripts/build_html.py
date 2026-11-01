@@ -22,6 +22,18 @@ def main():
                      dtype={"geoid": str})
     df["geoid"] = df.geoid.str.zfill(11)
 
+    # ---- park access (scripts/fetch_park_access.py) ----
+    # Share of each tract's tax lots standing within a walking distance of a
+    # major park (100+ acres, or waterfront). Straight-line screen from the lot
+    # coordinate to the park boundary — see the Sources pane for the caveat.
+    _pa_path = os.path.join(OUT, "park_access.json")
+    _pa = json.load(open(_pa_path)) if os.path.exists(_pa_path) else {}
+    if not _pa:
+        print("  ! no park_access.json — run scripts/fetch_park_access.py")
+    df["pk400"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("p400"))
+    df["pk800"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("p800"))
+    df["pklots"] = df.geoid.map(lambda g: (_pa.get(g) or {}).get("lots"))
+
     # ---- reliability gates ----
     df["rel_moe_1br"] = df.rent_1br_moe / df.rent_1br
     df["rel_moe_studio"] = df.rent_studio_moe / df.rent_studio
@@ -97,6 +109,12 @@ def main():
             # number a reader needs to judge how firm the "newbuild" read is.
             "newpp": _pct(r, "share_y2000_plus_moe"),
             "stocklow": (str(r.get("stock_conf")) == "low"),
+            # Park access: percent of the tract's tax lots within a 400 m (5 min)
+            # and 800 m (10 min) walk of a major park, plus the lot count behind
+            # the percentage so a 12-lot tract cannot read as a neighbourhood.
+            "pk400": None if pd.isna(r.get("pk400")) else float(r.pk400),
+            "pk800": None if pd.isna(r.get("pk800")) else float(r.pk800),
+            "pklots": None if pd.isna(r.get("pklots")) else int(r.pklots),
         }
 
     gj = geo_prep.feature_collection(m, _props)
@@ -506,6 +524,11 @@ TEMPLATE = r"""<!DOCTYPE html>
    border:2px solid #fff}
  .swrow{display:flex;align-items:center;justify-content:space-between;padding:2px 0;font-size:13px}
  .swrow span{color:var(--ink-soft)}
+ /* Amenity swatches: a filled chip reads as area, a rule reads as corridor. */
+ .swrow .sws{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:8px;
+   vertical-align:-1px;border:1px solid rgba(37,76,71,.28)}
+ .swrow .swl{display:inline-block;width:15px;height:0;border-top:2.5px solid #2f6f5f;
+   margin-right:8px;vertical-align:3px}
  .switch{position:relative;width:38px;height:21px;flex:none}
  .switch input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer;position:relative;z-index:2}
  .switch .track{position:absolute;inset:0;border-radius:11px;background:#d5ddd1;transition:.15s}
@@ -654,6 +677,7 @@ TEMPLATE = r"""<!DOCTYPE html>
         <button data-v="prem">Premium</button>
         <button data-v="newer">Newer stock</button>
         <button data-v="era">Year built</button>
+        <button data-v="park">Park access</button>
       </div>
 
       <div class="slider">
@@ -678,6 +702,10 @@ TEMPLATE = r"""<!DOCTYPE html>
         <label class="switch"><input type="checkbox" id="showLines" checked><span class="track"></span><span class="knob"></span></label></div>
       <div class="swrow"><span>Stations</span>
         <label class="switch"><input type="checkbox" id="showStations" checked><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span><i class="sws" style="background:#9dbb8e"></i>Parks &amp; open space</span>
+        <label class="switch"><input type="checkbox" id="showParks" checked><span class="track"></span><span class="knob"></span></label></div>
+      <div class="swrow"><span><i class="swl"></i>Bikeways</span>
+        <label class="switch"><input type="checkbox" id="showBike" checked><span class="track"></span><span class="knob"></span></label></div>
 
       <div class="keys" id="keysFit">
         <div class="krow"><span class="sw" style="background:var(--ok)"></span>Median rent in your band (reliable)</div>
@@ -713,6 +741,18 @@ TEMPLATE = r"""<!DOCTYPE html>
         <div class="ramp" style="background:linear-gradient(90deg,#8c9aa3,#a9b3a8,#d3cfb4,#e0c48b,#d9a95f,#b4703a)"></div>
         <div class="rampend"><span>1900</span><span>2015+</span></div>
         <div class="krow"><span class="sw" style="background:#cfc9b6"></span>No housing units (faded)</div>
+      </div>
+
+      <div class="keys" id="keysPark" hidden>
+        <div class="lbl" style="margin-bottom:8px">Tax lots within a 10-minute walk of a major park</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#e2e9ea,#cbd8e0,#a8bed2,#7d9dba,#4f7498)"></div>
+        <div class="rampend"><span>0%</span><span>100%</span></div>
+        <div class="krow"><span class="sw" style="background:var(--flat)"></span>Outside New York City — no tax-lot data</div>
+        <div style="margin-top:10px;font-size:11.5px;line-height:1.45;color:#6b857c">
+          Major park = 100 acres or more, or a waterfront park of 20 acres or
+          more. Distance runs straight from the lot to the park boundary — a
+          screen, so it overstates access across a river, rail yard or
+          expressway.</div>
       </div>
     </div>
 
@@ -760,6 +800,44 @@ TEMPLATE = r"""<!DOCTYPE html>
           payload size). Streets are re-drawn over the 3D mass so the grid stays
           legible. Buildings are deliberately 42% opaque — solid enough to read as a
           city, translucent enough to keep the tract colour underneath.</p>
+      </div>
+      <div>
+        <h4>Parks &amp; open space</h4>
+        <p>Every park or protected open space over 10 acres. Inside the five boroughs
+          the shapes, acreage and waterfront flag are NYC Parks' own property records,
+          so tiers there are surveyed rather than estimated. Outside the city the
+          polygons are OpenStreetMap, with acreage computed in a local metric projection
+          and <i>waterfront</i> assigned only where the park edge comes within 120 m of
+          a mapped water body or the coastline — an intersection test, not a name match.
+          Shapes re-tracing a city park are dropped, so nothing is drawn twice.</p>
+      </div>
+      <div>
+        <h4>Park access by tax lot</h4>
+        <p>Every PLUTO 26v2 tax lot (858,284 records) is matched to the nearest
+          <i>major</i> park — 100 acres or more, or flagged waterfront — and the
+          straight-line distance from the lot's coordinate to that park's boundary
+          is measured in a local metric projection. Two thresholds are reported:
+          400 m, about a five-minute walk, and 800 m, about ten. Tract percentages
+          are shares of <i>lots</i>, not of land or of people, so a tract of large
+          industrial parcels and a tract of narrow rowhouses count the same way;
+          the lot count travels with the figure in the detail card — read a
+          100% on a twenty-lot tract accordingly. Only the five boroughs have
+          tax-lot coordinates, so tracts outside the city stay blank.
+          <b>This is a screen, not a network walk.</b> Straight-line distance
+          ignores the river, rail yard or expressway between a lot and a park, so
+          it overstates access on waterfront edges and along the big cuts; a
+          routed pedestrian walk would show lower figures there. The lot-level
+          table itself is in <i>data/parcels_park_access.csv</i>.</p>
+      </div>
+      <div>
+        <h4>Bikeways</h4>
+        <p>NYC DOT Bicycle Routes, current status, facility classes I and II: greenways,
+          protected and off-street paths, and striped lanes. Class III — shared and
+          signed street routes — is left out, because a painted shared lane is a
+          designation rather than infrastructure. Named long-distance routes outside
+          the city (the East Coast Greenway and its kin) come from OpenStreetMap
+          <i>route=bicycle</i> relations and are drawn dashed-free but wider, labelled
+          along the line. Linework is simplified at 8 m for payload size.</p>
       </div>
       <div>
         <h4>Geometry</h4>
@@ -898,6 +976,14 @@ const PREM_STOPS=[[1.0,'#eae3d2'],[1.3,'#dcc39b'],[1.5,'#d6ab72'],
 const NEW_STOPS=[[0,'#e3e9dc'],[15,'#cadbc6'],[30,'#a6c2a1'],[45,'#6f9f88'],[60,'#33786c']];
 const ERA_STOPS=[[1900,'#8c9aa3'],[1930,'#a9b3a8'],[1950,'#d3cfb4'],[1970,'#e0c48b'],
                  [1990,'#d9a95f'],[2015,'#b4703a']];
+// Park access is a share, not a price: paper -> slate blue for the proportion
+// of a tract's tax lots that stand within a 10-minute walk of a major park.
+// Deliberately blue, so it cannot be confused with the teal "newer stock" ramp.
+// The floor is a cool grey-teal, not paper: half of the city's tracts sit at
+// zero, and a 0% that looks like an empty map is a different claim from a 0%
+// that looks analysed. No-data tracts are transparent, so this tint has to
+// read as "counted, none nearby".
+const PARK_STOPS=[[0,'#e2e9ea'],[25,'#cbd8e0'],[50,'#a8bed2'],[75,'#7d9dba'],[100,'#4f7498']];
 const PAPER='#f6f5ea';
 
 function hex2rgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
@@ -924,7 +1010,7 @@ function colorMode(){
 // anywhere (button, reset, saved state) cannot leave the wrong legend on screen.
 function syncKeys(){
   const m=colorMode();
-  const KEYS={fit:'keysFit',ask:'keysAsk',prem:'keysPrem',newer:'keysNewer',era:'keysEra'};
+  const KEYS={fit:'keysFit',ask:'keysAsk',prem:'keysPrem',newer:'keysNewer',era:'keysEra',park:'keysPark'};
   Object.keys(KEYS).forEach(k=>{
     const el=document.getElementById(KEYS[k]);
     if(el) el.hidden=(k!==m);
@@ -958,6 +1044,11 @@ function eraColor(p){
   return ramp(ERA_STOPS,Math.max(1900,Math.min(p.yr,2015)));
 }
 
+function parkColor(p){
+  if(p.pk800==null) return null;
+  return ramp(PARK_STOPS,Math.max(0,Math.min(p.pk800,100)));
+}
+
 function fillFor(p,cmax,rmin,rmax){
   const t=modeMin(p);
   if(t==null||t>cmax) return null;
@@ -966,6 +1057,7 @@ function fillFor(p,cmax,rmin,rmax){
   if(m==='prem') return premColor(p);
   if(m==='newer') return newerColor(p);
   if(m==='era') return eraColor(p);
+  if(m==='park') return parkColor(p);
   return color(p,cmax,rmin,rmax);
 }
 
@@ -1021,6 +1113,8 @@ function detailHTML(p){
     <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
     <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
     ${stockBlock(p)}
+    ${p.pk800==null?'':`<div class="kv"><span>Lots near a major park</span><b>${p.pk800}% (10 min walk)</b></div>
+    <div class="kv"><span>…within 5 min walk</span><b>${p.pk400}%</b></div>`}
     ${p.ask==null?
       `<div class="kv"><span>Asking, all units</span><b class="dim">no ZIP index</b></div>`:
       `<div class="kv"><span>Asking, all units</span><b>$${p.ask.toLocaleString()}</b></div>
@@ -1069,6 +1163,33 @@ map.on('load',()=>{
   map.addLayer({id:'tracts-line',type:'line',source:'tracts',
     filter:['!=',['get','fill'],NONE],
     paint:{'line-color':'#fdfcf6','line-width':0.7,'line-opacity':0.55}});
+
+  // Community amenities. Neither layer is in the basemap at any useful scale:
+  // Positron washes every park the same pale green and omits greenways outright.
+  // Both are drawn from a one-off GeoJSON fetched on first idle, so the first
+  // paint is unaffected. Parks sit above the choropleth but below the transport
+  // network; the fill is translucent enough that the tract colour still reads
+  // through a park, which is the point -- a big park should look like a hole in
+  // the rents, not like a hole in the map.
+  map.addSource('parks',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  // Park names come from their own one-point-per-name file: MapLibre labels a
+  // MultiPolygon once per part, which printed "Pelham Bay Park" on every island.
+  map.addSource('park-labels',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'parks-fill',type:'fill',source:'parks',
+    paint:{'fill-color':['case',['==',['get','waterfront'],1],'#72ada2','#96b98a'],
+           // The choropleth is the primary reading, so the park wash stays light
+           // and the outline does most of the shape work; waterfront parks hold a
+           // little more colour so the shoreline parks separate from inland ones.
+           // The case sits INSIDE the stops: MapLibre rejects an expression
+           // holding two zoom-based interpolates inside one case, and skips
+           // the whole layer without a visible failure.
+           'fill-opacity':['interpolate',['linear'],['zoom'],
+             9,['case',['==',['get','waterfront'],1],0.28,0.18],
+             14,['case',['==',['get','waterfront'],1],0.40,0.30]]}});
+  map.addLayer({id:'parks-line',type:'line',source:'parks',
+    paint:{'line-color':['case',['==',['get','waterfront'],1],'#39786f','#4e7649'],
+           'line-width':['interpolate',['linear'],['zoom'],9,0.7,13,1.2,16,2.0],
+           'line-opacity':0.85}});
 
   // 3D: the same OpenFreeMap tile source the basemap uses carries
   // render_height / render_min_height on the building layer (OpenMapTiles
@@ -1139,6 +1260,28 @@ map.on('load',()=>{
                          ['case',['==',['get','net'],'subway'],4,2.4]],
            'line-opacity':['case',['==',['get','net'],'subway'],0.95,0.75]}});
 
+  // Bikeways, layered the way a cyclist reads them: the long-distance corridors
+  // are the skeleton and go down first, protected and off-street facility class I
+  // next, striped class II only once the camera is close enough for individual
+  // lanes to mean something. All three are inserted beneath the transit casing so
+  // a shared bridge or corridor still reads as rail-first, bike-second.
+  map.addSource('bike',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  map.addLayer({id:'bike-regional',type:'line',source:'bike',minzoom:8.5,
+    filter:['==',['get','net'],'osm'],
+    paint:{'line-color':'#0d5f6b',
+           'line-width':['interpolate',['linear'],['zoom'],8.5,1.5,13,2.5,16,3.4],
+           'line-opacity':0.78}},'lines-casing');
+  map.addLayer({id:'bike-primary',type:'line',source:'bike',minzoom:10.4,
+    filter:['all',['==',['get','net'],'nyc'],['==',['get','cls'],'I']],
+    paint:{'line-color':'#0e6a72',
+           'line-width':['interpolate',['linear'],['zoom'],10.4,1.1,14,2.2,17,3.4],
+           'line-opacity':0.88}},'lines-casing');
+  map.addLayer({id:'bike-local',type:'line',source:'bike',minzoom:12.2,
+    filter:['all',['==',['get','net'],'nyc'],['==',['get','cls'],'II']],
+    paint:{'line-color':'#468d97',
+           'line-width':['interpolate',['linear'],['zoom'],12.2,0.7,15,1.5,17,2.3],
+           'line-opacity':0.72}},'lines-casing');
+
   // Place names. Positron draws towns and villages in black Noto with a white
   // halo and has no neighbourhood tier at all, so nothing inside the boroughs is
   // named. Both fight the editorial shell: the basemap's place layers are turned
@@ -1194,6 +1337,43 @@ map.on('load',()=>{
     paint:{'text-color':'#1b2a22','text-halo-color':'rgba(250,248,238,0.98)',
            'text-halo-width':1.7}});
 
+  // Park names, in two size tiers so only parks that actually read as places get
+  // a label at metro scale; forty-acre squares still earn one at neighbourhood
+  // zoom. Sorted by acreage so the largest park keeps its name when two collide.
+  const parkLabel={name:['get','name'],font:['Noto Sans Bold'],letter:0.04,
+                   maxw:9,pad:6,
+                   color:'#2f5a3d',halo:'rgba(250,249,240,0.95)',halow:1.6};
+  map.addLayer({id:'parks-label-big',type:'symbol',source:'park-labels',minzoom:9.4,
+    filter:['>=',['get','acres'],150],
+    layout:{'text-field':parkLabel.name,'text-font':parkLabel.font,
+            'text-size':['interpolate',['linear'],['zoom'],9.4,10.5,13,12.5,16,14],
+            'text-letter-spacing':parkLabel.letter,'text-max-width':parkLabel.maxw,
+            'text-padding':parkLabel.pad,
+            'symbol-sort-key':['-',0,['get','acres']]},
+    paint:{'text-color':parkLabel.color,'text-halo-color':parkLabel.halo,
+           'text-halo-width':parkLabel.halow}});
+  map.addLayer({id:'parks-label-mid',type:'symbol',source:'park-labels',minzoom:11.6,
+    filter:['all',['>=',['get','acres'],40],['<',['get','acres'],150]],
+    layout:{'text-field':parkLabel.name,'text-font':parkLabel.font,
+            'text-size':['interpolate',['linear'],['zoom'],11.6,10,15,12],
+            'text-letter-spacing':parkLabel.letter,'text-max-width':parkLabel.maxw,
+            'text-padding':parkLabel.pad,
+            'symbol-sort-key':['-',0,['get','acres']]},
+    paint:{'text-color':parkLabel.color,'text-halo-color':parkLabel.halo,
+           'text-halo-width':parkLabel.halow}});
+
+  // Corridor names run along the line, spaced far apart: a greenway is a place you
+  // follow, not a road you turn onto, and repeating the name every block reads as
+  // signage rather than cartography.
+  map.addLayer({id:'bike-label',type:'symbol',source:'bike',minzoom:9.6,
+    filter:['==',['get','net'],'osm'],
+    layout:{'text-field':['get','name'],'text-font':['Noto Sans Bold'],
+            'symbol-placement':'line','text-max-angle':30,'symbol-spacing':340,
+            'text-size':['interpolate',['linear'],['zoom'],9.6,9.5,15,11],
+            'text-letter-spacing':0.08,'text-transform':'uppercase','text-padding':4},
+    paint:{'text-color':'#0d4f57','text-halo-color':'rgba(250,249,240,0.95)',
+           'text-halo-width':1.5}});
+
     map.addSource('stations',{type:'geojson',data:stnFC});
   // Station dots are noise at city scale: below z11 the network line pattern
   // already reads, and 441 named circles collapse into a rash of white rings.
@@ -1207,13 +1387,31 @@ map.on('load',()=>{
            'circle-stroke-color':['case',['==',['get','xfer'],true],'#254c47','#ffffff']}});
 
   // Text last: route lines and station rings are added above everything else, and
-  // without this they slice straight through the place names.
-  ['places-town','places-borough','places-hood']
+  // without this they slice straight through the place names. Amenity labels go
+  // under the settlement names -- a park is an attribute of a neighbourhood, not a
+  // rival to it.
+  ['parks-label-big','parks-label-mid','bike-label',
+   'places-town','places-borough','places-hood']
     .forEach(id=>{if(map.getLayer(id))map.moveLayer(id)});
 
   map.on('click','tracts-fill',e=>{
     const p=e.features[0].properties;
     openDetail(p);
+  });
+  // A park click answers the obvious question a renter asks of a green shape:
+  // how big is it, and can I see water from it.
+  map.on('click','parks-fill',e=>{
+    const p=e.features[0].properties||{};
+    const acres=p.acres>=10?Math.round(p.acres).toLocaleString()+' acres':'';
+    const bits=[acres];
+    if(p.waterfront==1) bits.push('waterfront');
+    if(p.cls) bits.push(p.cls);
+    new maplibregl.Popup({offset:8,maxWidth:'250px'}).setLngLat(e.lngLat)
+      .setHTML(`<b>${p.name||'Open space'}</b><br>`
+               +`<span style="color:#6b857c;font-size:11px">${bits.filter(Boolean).join(' · ')}</span>`
+               +`<br><span style="color:#8d9c93;font-size:10.5px">${
+                    p.src==='nyc'?'NYC Parks property record':'OpenStreetMap, measured'}</span>`)
+      .addTo(map);
   });
   map.on('click','stations',e=>{
     const p=e.features[0].properties;
@@ -1221,13 +1419,16 @@ map.on('load',()=>{
       .setHTML(`<b>${p.name}</b>`+(p.routes?`<br><span style="color:#6b857c;font-size:11px">${p.routes}</span>`:'')
                +`<br><span style="color:#6b857c">${p.min} min to Penn 1</span>`).addTo(map);
   });
-  ['tracts-fill','stations'].forEach(id=>{
+  ['tracts-fill','parks-fill','stations'].forEach(id=>{
     map.on('mouseenter',id,()=>{map.getCanvas().style.cursor='pointer';});
     map.on('mouseleave',id,()=>{map.getCanvas().style.cursor='';});
   });
 
   ready=true;
   draw();
+  // Amenity GeoJSON runs to a few megabytes; it lands after the first paint so the
+  // map is interactive while the parks are still in flight.
+  setTimeout(loadAmenities,600);
 });
 
 function openDetail(p){
@@ -1327,6 +1528,24 @@ async function loadTrees(){
     map.getSource('trees').setData({type:'FeatureCollection',features:f});
   }catch(e){ console.warn('trees unavailable',e); }
 }
+// Parks and bikeways: one fetch each, on first use, then cached in the source.
+let amenLoaded=false;
+async function loadAmenities(){
+  if(amenLoaded) return;
+  amenLoaded=true;
+  try{
+    const p=await (await fetch('parks.geojson')).json();
+    map.getSource('parks').setData(p);
+  }catch(e){ console.warn('parks unavailable',e); }
+  try{
+    const l=await (await fetch('parks-labels.geojson')).json();
+    map.getSource('park-labels').setData(l);
+  }catch(e){ console.warn('park labels unavailable',e); }
+  try{
+    const b=await (await fetch('bikeways.geojson')).json();
+    map.getSource('bike').setData(b);
+  }catch(e){ console.warn('bikeways unavailable',e); }
+}
 function apply3d(on){
   is3d=on;
   document.getElementById('btn3d').classList.toggle('on',on);
@@ -1370,6 +1589,16 @@ document.getElementById('showLines').onchange=e=>{
 };
 document.getElementById('showStations').onchange=e=>{
   if(ready) map.setLayoutProperty('stations','visibility',e.target.checked?'visible':'none');
+};
+document.getElementById('showParks').onchange=e=>{
+  if(!ready) return;
+  ['parks-fill','parks-line','parks-label-big','parks-label-mid'].forEach(id=>
+    map.setLayoutProperty(id,'visibility',e.target.checked?'visible':'none'));
+};
+document.getElementById('showBike').onchange=e=>{
+  if(!ready) return;
+  ['bike-regional','bike-primary','bike-local','bike-label'].forEach(id=>
+    map.setLayoutProperty(id,'visibility',e.target.checked?'visible':'none'));
 };
 
 </script></body></html>"""
