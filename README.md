@@ -199,7 +199,10 @@ tracts; 8.6% are within 400 m of a major park and 19.4% within 800 m, against
 The two denominators are checked against each other rather than assumed
 compatible. On the 2,281 tracts where both exist the tract-level shares agree to
 a median difference of 0 points, a mean of 3.4, r = 0.978 — the seam at the city
-line can be read straight through. The block-group method is coarser where block
+line can be read straight through. The bias is not quite zero though: weighted
+across those same tracts the block-group method reads 20.8% and 41.5% against
+the lots' 18.2% and 36.9%, about two points higher, because a block-group centre
+sits nearer the middle of where people live than a lot coordinate does. The block-group method is coarser where block
 groups are large, so exurban tracts in Suffolk and Middlesex carry more
 approximation than a Brooklyn block does.
 
