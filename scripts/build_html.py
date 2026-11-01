@@ -51,6 +51,10 @@ def main():
     m, n_water = geo_prep.build(keep, log=print)
     geo_rows = keep.copy()   # `keep` is reused for station bookkeeping further down
 
+    def _pct(r, col):
+        v = r.get(col)
+        return None if pd.isna(v) else round(float(v) * 100, 1)
+
     def _props(r):
         return {
             "geoid": r.geoid,
@@ -79,6 +83,20 @@ def main():
             "askz": None if pd.isna(r.get("ask_nzips")) else int(r.ask_nzips),
             "prem": None if pd.isna(r.get("prem")) else round(float(r.prem), 2),
             "premlo": bool(pd.notna(r.get("prem_relmoe")) and r.prem_relmoe > C.PREM_MOE_LIMIT),
+            # Housing stock age (ACS B25034): shares are of HOUSING UNITS, in
+            # percent, and always sum to ~100. null where the tract has no
+            # housing base or the table was not built.
+            "units": None if pd.isna(r.get("units_total")) else int(r.units_total),
+            "yr": None if pd.isna(r.get("med_year")) else int(r.med_year),
+            "prew": _pct(r, "share_pre_1940"),
+            "pwar": _pct(r, "share_y1940_1979"),
+            "late": _pct(r, "share_y1980_1999"),
+            "newp": _pct(r, "share_y2000_plus"),
+            "new10": _pct(r, "share_new_2010"),
+            # 90% margin on the post-2000 share, in percentage points: the one
+            # number a reader needs to judge how firm the "newbuild" read is.
+            "newpp": _pct(r, "share_y2000_plus_moe"),
+            "stocklow": (str(r.get("stock_conf")) == "low"),
         }
 
     gj = geo_prep.feature_collection(m, _props)
@@ -288,11 +306,22 @@ def main():
         "n_lowconf": int(geo_rows.prem_relmoe.gt(C.PREM_MOE_LIMIT).sum()) if geo_rows.prem.notna().any() else 0,
     }
 
+    # Housing stock context: how much of the region ACS can actually describe.
+    hs = geo_rows.share_y2000_plus
+    stock_ctx = {
+        "pct": round(100 * hs.notna().mean(), 0),
+        "n": int(hs.notna().sum()),
+        "n_counties": int(geo_rows.loc[hs.notna(), "geoid"].str[:5].nunique()),
+        "new_med": round(100 * float(hs.median()), 0) if hs.notna().any() else None,
+        "year_med": int(geo_rows.med_year.median()) if geo_rows.med_year.notna().any() else None,
+        "n_lowconf": int((geo_rows.stock_conf == "low").sum()),
+    }
+
     meta = {"zori_month": (zm.iloc[0][:10] if len(zm) else "2026-09-30"),
             "acs_vintage": "2017-2021..2020-2024 (5yr 2024)",
             "topcap": TOPCAP, "max_rel_moe": MAX_REL_MOE,
             "water_share_max": C.WATER_SHARE_MAX, "water_tracts_removed": n_water,
-            "ask": ask_ctx}
+            "ask": ask_ctx, "stock": stock_ctx}
 
     html = render(gj, lines, stations, meta)
     C.ensure_dirs()
@@ -331,9 +360,23 @@ def render(gj, lines, stations, meta):
     else:
         warn = "An asking-rent comparison was not built for this run."
         method = "Run <code>scripts/build_asking.py</code> to add Zillow ZORI."
+    s = meta.get("stock") or {}
+    if s.get("n"):
+        stocknote = (f"{s.get('pct') or 0:.0f}% of mapped tracts ({s.get('n'):,}) across "
+                     f"{s.get('n_counties')} counties carry this table. The median tract is "
+                     f"{s.get('new_med') or 0:.0f}% post-2000 and the median structure in the "
+                     f"region was built in {s.get('year_med') or '—'}. "
+                     f"{s.get('n_lowconf') or 0} of them carry a post-2000 margin wider than "
+                     f"{100*C.WIDE_MARGIN_RELMOE:.0f}% of the estimate; those are not "
+                     f"faded, but the detail card prints the ± on the number so the "
+                     f"margin travels with the claim.")
+    else:
+        stocknote = "Housing-age data was not built for this run."
+
     return (TEMPLATE.replace("__DATA__", data)
                     .replace("__ASKWARN__", warn)
-                    .replace("__ASKMETHOD__", method))
+                    .replace("__ASKMETHOD__", method)
+                    .replace("__STOCKCTX__", stocknote))
 
 
 TEMPLATE = r"""<!DOCTYPE html>
@@ -405,8 +448,8 @@ TEMPLATE = r"""<!DOCTYPE html>
  /* explore */
  #pane-explore{padding:16px 18px 18px;gap:14px;overflow:auto}
  .lbl{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600}
- .seg{display:flex;background:var(--card-2);border-radius:11px;padding:3px;gap:3px}
- .seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:7px 4px;
+ .seg{display:flex;flex-wrap:wrap;background:var(--card-2);border-radius:11px;padding:3px;gap:3px}
+ .seg button{flex:1 1 30%;min-width:30%;border:0;background:transparent;border-radius:9px;padding:7px 4px;
              font-size:12.5px;font-weight:600;color:var(--muted)}
  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(30,50,45,.12)}
  .slider{display:grid;gap:6px}
@@ -435,6 +478,11 @@ TEMPLATE = r"""<!DOCTYPE html>
  .sw{width:13px;height:13px;border-radius:4px;flex:none}
  .sw.dot{border-radius:50%}
 .ramp{height:9px;border-radius:5px;margin:0 0 4px}
+ .hbar{display:flex;height:9px;border-radius:5px;overflow:hidden;margin:9px 0 5px;
+       box-shadow:inset 0 0 0 1px rgba(30,50,45,.06)}
+ .hbar i{display:block;height:100%}
+ .hlab{font-size:11px;color:var(--muted);line-height:1.5;font-variant-numeric:tabular-nums}
+ .hlab b{color:var(--ink);font-weight:600}
 .rampend{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);
   font-variant-numeric:tabular-nums;margin-bottom:6px}
  .hint{font-size:11.5px;color:var(--muted);line-height:1.45}
@@ -561,6 +609,8 @@ TEMPLATE = r"""<!DOCTYPE html>
         <button data-v="fit" class="on">Budget fit</button>
         <button data-v="ask">Asking</button>
         <button data-v="prem">Premium</button>
+        <button data-v="newer">Newer stock</button>
+        <button data-v="era">Year built</button>
       </div>
 
       <div class="slider">
@@ -607,6 +657,20 @@ TEMPLATE = r"""<!DOCTYPE html>
         <div class="rampend"><span>1.0×</span><span>2.0×+</span></div>
         <div class="krow"><span class="sw" style="background:#cfc9b6"></span>Paid rent too noisy to divide by (faded)</div>
       </div>
+
+      <div class="keys" id="keysNewer" hidden>
+        <div class="lbl" style="margin-bottom:8px">Share of units built 2000 or later</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#e3e9dc,#cadbc6,#a6c2a1,#6f9f88,#33786c)"></div>
+        <div class="rampend"><span>0%</span><span>60%+</span></div>
+        <div class="krow"><span class="sw" style="background:#cfc9b6"></span>No housing units in the tract</div>
+      </div>
+
+      <div class="keys" id="keysEra" hidden>
+        <div class="lbl" style="margin-bottom:8px">Median year the structure was built</div>
+        <div class="ramp" style="background:linear-gradient(90deg,#8c9aa3,#a9b3a8,#d3cfb4,#e0c48b,#d9a95f,#b4703a)"></div>
+        <div class="rampend"><span>1900</span><span>2015+</span></div>
+        <div class="krow"><span class="sw" style="background:#cfc9b6"></span>No housing units (faded)</div>
+      </div>
     </div>
 
     <div class="pane" id="pane-list">
@@ -625,6 +689,18 @@ TEMPLATE = r"""<!DOCTYPE html>
       <div>
         <h4>Asking rents</h4>
         <p>__ASKMETHOD__</p>
+      </div>
+      <div>
+        <h4>Housing age</h4>
+        <p>ACS 5-year 2020–2024, table B25034: housing units by the year the
+           structure was built, summed into pre-1940, 1940–79, 1980–99 and 2000
+           or later; B25035 gives the median year. __STOCKCTX__ Counts are units,
+           not buildings, so a 200-unit tower built in 2018 weighs a hundred
+           times a 1920 two-family — the right denominator for what is actually
+           rentable. ACS records age, not renovation: a gut-renovated 1910
+           walk-up still reads as 1910. NYC alteration year (PLUTO <i>yearalter</i>)
+           can flag recent work there, but no equivalent tabulation covers New
+           Jersey, so no retrofit layer is drawn.</p>
       </div>
       <div>
         <h4>Commute</h4>
@@ -773,6 +849,12 @@ const ASK_STOPS=[[1800,'#e8eeea'],[2400,'#c3d8d2'],[3000,'#93bcb3'],
                  [3600,'#5d9a8f'],[4200,'#33786c'],[4800,'#1d5750']];
 const PREM_STOPS=[[1.0,'#eae3d2'],[1.3,'#dcc39b'],[1.5,'#d6ab72'],
                   [1.7,'#c2824d'],[2.0,'#a2532f']];
+// Housing age reads as a level, not a verdict: paper -> deep teal for the share
+// of units built since 2000, and a cool-to-warm ramp for median year built so
+// the pre-war core and the post-war suburbs separate at a glance.
+const NEW_STOPS=[[0,'#e3e9dc'],[15,'#cadbc6'],[30,'#a6c2a1'],[45,'#6f9f88'],[60,'#33786c']];
+const ERA_STOPS=[[1900,'#8c9aa3'],[1930,'#a9b3a8'],[1950,'#d3cfb4'],[1970,'#e0c48b'],
+                 [1990,'#d9a95f'],[2015,'#b4703a']];
 const PAPER='#f6f5ea';
 
 function hex2rgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
@@ -795,6 +877,17 @@ function colorMode(){
   return b?b.dataset.v:'fit';
 }
 
+// One place that keeps the legend in step with the colour mode, so a mode set
+// anywhere (button, reset, saved state) cannot leave the wrong legend on screen.
+function syncKeys(){
+  const m=colorMode();
+  const KEYS={fit:'keysFit',ask:'keysAsk',prem:'keysPrem',newer:'keysNewer',era:'keysEra'};
+  Object.keys(KEYS).forEach(k=>{
+    const el=document.getElementById(KEYS[k]);
+    if(el) el.hidden=(k!==m);
+  });
+}
+
 function askColor(p){
   if(p.ask==null) return null;
   return ramp(ASK_STOPS,p.ask);
@@ -809,12 +902,27 @@ function premColor(p){
   return p.premlo? mix(c,PAPER,0.55) : c;
 }
 
+function newerColor(p){
+  if(p.newp==null) return null;
+  // No fade here on purpose: the margin travels with the number in the detail
+  // card (± points), and suppressing a 40% ±8pp tract because its margin looks
+  // wide would hide exactly the neighbourhoods this view exists to find.
+  return ramp(NEW_STOPS,Math.min(p.newp,60));
+}
+
+function eraColor(p){
+  if(p.yr==null) return null;
+  return ramp(ERA_STOPS,Math.max(1900,Math.min(p.yr,2015)));
+}
+
 function fillFor(p,cmax,rmin,rmax){
   const t=modeMin(p);
   if(t==null||t>cmax) return null;
   const m=colorMode();
   if(m==='ask') return askColor(p);
   if(m==='prem') return premColor(p);
+  if(m==='newer') return newerColor(p);
+  if(m==='era') return eraColor(p);
   return color(p,cmax,rmin,rmax);
 }
 
@@ -837,6 +945,25 @@ function popupHTML(p){
     studio ${capTxt(p.stu,p.stu_cap)} · 1BR ${capTxt(p.one,p.one_cap)}`;
 }
 
+// The composition is the point of the housing-age view: the map can only carry
+// one variable at a time, so the card shows all four bands for the tract you
+// picked, plus the finer post-2010 cut ACS can still resolve.
+function stockBlock(p){
+  if(p.units==null) return '';
+  const seg=[['prew','#8c9aa3','pre-1940'],['pwar','#d3cfb4','1940–79'],
+             ['late','#d9a95f','1980–99'],['newp','#33786c','2000+']];
+  const sum=seg.reduce((a,s)=>a+(p[s[0]]||0),0);
+  const bar=sum>0? seg.map(s=>
+    `<i style="background:${s[1]};width:${((p[s[0]]||0)/sum*100).toFixed(1)}%"></i>`).join('') : '';
+  return `<div class="kv"><span>Housing units</span><b>${p.units.toLocaleString()}</b></div>
+    <div class="kv"><span>Median year built</span><b>${p.yr==null?'—':p.yr}</b></div>
+    <div class="hbar">${bar}</div>
+    <div class="hlab"><b>${p.prew??'—'}%</b> pre-1940 ·
+      <b>${p.pwar??'—'}%</b> 1940–79 · <b>${p.late??'—'}%</b> 1980–99 ·
+      <b>${p.newp??'—'}%</b>${p.newpp==null?'':` <span style="opacity:.65">±${p.newpp}</span>`}
+      2000+${p.new10==null?'':` · ${p.new10}% since 2010`}</div>`;
+}
+
 function detailHTML(p){
   const lead = p.one_cap? p.stu : (p.one!=null? p.one : p.stu);
   const leadLbl = p.one_cap? 'studio' : (p.one!=null? '1BR median' : 'studio median');
@@ -850,6 +977,7 @@ function detailHTML(p){
     <div class="kv"><span>Studio</span><b>${capTxt(p.stu,p.stu_cap)}</b></div>
     <div class="kv"><span>1BR</span><b>${capTxt(p.one,p.one_cap)}</b></div>
     <div class="kv"><span>All units</span><b>${capTxt(p.allr,p.allr_cap)}</b></div>
+    ${stockBlock(p)}
     ${p.ask==null?
       `<div class="kv"><span>Asking, all units</span><b class="dim">no ZIP index</b></div>`:
       `<div class="kv"><span>Asking, all units</span><b>$${p.ask.toLocaleString()}</b></div>
@@ -1077,10 +1205,7 @@ document.getElementById('mode').onclick=e=>{
 document.getElementById('cmode').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#cmode button').forEach(x=>x.classList.toggle('on',x===b));
-  const m=colorMode();
-  document.getElementById('keysFit').hidden=(m!=='fit');
-  document.getElementById('keysAsk').hidden=(m!=='ask');
-  document.getElementById('keysPrem').hidden=(m!=='prem');
+  syncKeys();
   draw();
 };
 let is3d=false, auto3d=false, treesLoaded=false;
@@ -1119,6 +1244,7 @@ map.on('zoomend',()=>{
 });
 document.getElementById('btnIn').onclick=()=>map.zoomIn();
 document.getElementById('btnOut').onclick=()=>map.zoomOut();
+syncKeys();
 document.getElementById('btnReset').onclick=resetView;
 document.getElementById('resetTop').onclick=resetView;
 function resetView(){

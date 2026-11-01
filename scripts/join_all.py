@@ -162,6 +162,27 @@ def main():
             df[c] = np.nan
         print("asking rents: not built (run scripts/build_asking.py)")
 
+    # Housing stock age (ACS B25034/B25035) comes from its own stage and is
+    # optional for the same reason as asking rents: the map must still build
+    # when a table has not been downloaded yet.
+    if C.OUT_TRACT_STOCK.exists():
+        st = pd.read_csv(C.OUT_TRACT_STOCK, dtype={"geoid": str})
+        st["geoid"] = st.geoid.str.zfill(11)
+        df["geoid"] = df.geoid.str.zfill(11)
+        cols = ["geoid", "units_total", "med_year", "stock_conf", "relmoe_y2000_plus",
+                "share_pre_1940", "share_y1940_1979", "share_y1980_1999",
+                "share_y2000_plus", "share_y2000_plus_moe", "share_new_2010",
+                "share_new_2020"]
+        df = df.merge(st[cols], on="geoid", how="left")
+        print(f"housing stock merged: {df.share_y2000_plus.notna().sum():,} tracts")
+    else:
+        for c in ("units_total", "med_year", "stock_conf", "relmoe_y2000_plus",
+                  "share_pre_1940", "share_y1940_1979", "share_y1980_1999",
+                  "share_y2000_plus", "share_y2000_plus_moe", "share_new_2010",
+                  "share_new_2020"):
+            df[c] = np.nan
+        print("housing stock: not built (run scripts/build_stock.py)")
+
     df.to_csv(C.OUT_TRACT_JOINED, index=False)
     print(f"\nwrote {C.OUT_TRACT_JOINED}  ({len(df):,} rows)")
 

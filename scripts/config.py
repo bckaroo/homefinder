@@ -31,6 +31,9 @@ FEEDS = {
 # --- raw input files ---
 ACS_5YR_2024_B25064 = RAW / "acsdt5y2024-b25064.dat"
 ACS_5YR_2024_B25031 = RAW / "acsdt5y2024-b25031.dat"
+# Housing stock: B25034 = year structure built (10 bands, units), B25035 = median year
+ACS_5YR_2024_B25034 = RAW / "acsdt5y2024-b25034.dat"
+ACS_5YR_2024_B25035 = RAW / "acsdt5y2024-b25035.dat"
 GEOS_2023_5YR = RAW / "Geos20235YR.txt"
 ZORI_ZIP = RAW / "Zip_zori_uc_sfrcondomfr_sm_month.csv"
 CB_TRACT_NY = RAW / "cb_2023_36_tract_500k.zip"
@@ -60,6 +63,9 @@ OUT_COMMUTE_META = DATA / "commute_modes.meta.json"
 # --- asking rents: ZORI allocated from ZIP codes to tracts ---
 ZCTA_METRO = RAW / "geo" / "zcta520_metro.geojson"   # TIGERweb pull, cached
 ZCTA_BBOX = "-74.60,40.30,-73.30,41.40"              # W,S,E,N around study area
+OUT_TRACT_STOCK = DATA / "tract_stock.csv"
+MIN_UNITS_FOR_STOCK_SHARE = 50   # below this a share is too jittery to colour
+WIDE_MARGIN_RELMOE = 0.60       # share this noisy gets a "wide margin" note, still coloured
 OUT_TRACT_ASKING = DATA / "tract_asking.csv"
 MIN_RENT_FOR_PREMIUM = 500.0      # below this the ACS median is not a market rent
 PREM_MOE_LIMIT = 0.30             # relative MOE above this: ratio shown as low-confidence
@@ -71,6 +77,14 @@ PREM_CAP = 3.0                   # display buckets top out here ("3x or more")
 # router: build_modes.py is optional and join_all.py degrades to nulls.
 VALHALLA_URL = os.environ.get("VALHALLA_URL", "http://127.0.0.1:3204")
 OSM_DIR = RAW / "osm"
+
+# --- regional universe: every county in the map's commute shed (NY + NJ) ---
+NYC_COUNTIES = frozenset({"36061", "36047", "36081", "36085", "36005"})
+REGION_COUNTIES = NYC_COUNTIES | frozenset({
+    "36059", "36103", "36119", "36087", "36079", "36027", "36071", "36033", "36039", "36111",
+    "34003", "34017", "34023", "34025", "34029", "34031", "34035", "34037", "34039", "34013",
+    "34019", "34027", "34041", "34021", "34005", "34007",
+})
 
 # --- analysis constants ---
 PENN1 = (40.75056, -73.99386)   # 1 Penn Plaza, lat/lon

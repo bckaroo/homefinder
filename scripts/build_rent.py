@@ -16,12 +16,9 @@ OUT = str(C.DATA)
 
 
 
-NYC_COUNTIES = {"36061", "36047", "36081", "36085", "36005"}  # Man, Bk, Qns, SI, Bx
-NEARBY = NYC_COUNTIES | {
-    "36059","36103","36119","36087","36079","36027","36071","36033","36039","36111",
-    "34003","34017","34023","34025","34029","34031","34035","34037","34039","34013",
-    "34019","34027","34041","34021","34005","34007",
-}
+# Regional universe lives in config so every stage filters the same tracts.
+NYC_COUNTIES = C.NYC_COUNTIES
+NEARBY = C.REGION_COUNTIES
 
 
 def load_table(path, cols):
